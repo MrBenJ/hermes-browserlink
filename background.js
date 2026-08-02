@@ -1403,7 +1403,12 @@ function teardownTabListeners() {
 // deliberately excludes.
 function sendTabChanged(tab) {
   if (!tab || isForbiddenTab(tab)) return;
-  sendTabChanged(tab);
+  sendToViewer({
+    type: 'tabChanged',
+    tabId: tab.id,
+    url: tab.url || '',
+    title: tab.title || ''
+  });
 }
 
 async function sendTabListToViewer() {

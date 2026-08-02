@@ -15,6 +15,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   const windowUpdates = [];
   const debuggerCommands = [];
   const updates = [];
+  const sentToViewer = [];
   const listeners = () => ({ addListener() {}, removeListener() {} });
 
   const chrome = {
@@ -25,7 +26,12 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
     },
     runtime: {
       getContexts: async () => [],
-      sendMessage: async () => ({}),
+      sendMessage: async (message) => {
+        if (message && message.action === 'offscreen:sendToViewer') {
+          sentToViewer.push(message.message);
+        }
+        return {};
+      },
       onMessage: listeners()
     },
     offscreen: { createDocument: async () => {}, closeDocument: async () => {} },
@@ -86,7 +92,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   });
   context.__handleControlEvent = context.__browserlinkBackgroundTestHooks.handleControlEventForTest;
 
-  return { context, removed, windowUpdates, debuggerCommands, fetchCalls, updates };
+  return { context, removed, windowUpdates, debuggerCommands, fetchCalls, updates, sentToViewer };
 }
 
 const NORMAL = 11;
@@ -249,6 +255,22 @@ describe('already-hosting guard', () => {
 });
 
 describe('tabChanged scheme policy', () => {
+  // The accepted branch needs its own coverage: a helper that only ever
+  // early-returns still passes every forbidden-tab assertion.
+  it('sends exactly one tabChanged for an allowed web tab', async () => {
+    const { context, sentToViewer } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({ hosting: true, viewerConnected: true, capturedTabId: NORMAL });
+    sentToViewer.length = 0;
+
+    hooks.sendTabChangedForTest({ id: NORMAL, url: TAB_URLS[NORMAL], title: 'Example' });
+
+    const changed = sentToViewer.filter((m) => m.type === 'tabChanged');
+    expect(changed).toHaveLength(1);
+    expect(changed[0]).toMatchObject({ tabId: NORMAL, url: TAB_URLS[NORMAL], title: 'Example' });
+  });
+
   it('does not leak non-capturable tab urls to the viewer', async () => {
     const { context } = loadBackground({ tabsByIdiUrl: TAB_URLS });
     const hooks = context.__browserlinkBackgroundTestHooks;

@@ -338,11 +338,17 @@
       });
 
       if (params.get('host')) {
-        if (location.search) location.replace('/viewer/#' + params.toString());
+        // Normalize ?host=... to #host=... in place. Using location.pathname
+        // keeps this correct when the viewer is served as a standalone file
+        // (e.g. /browserlink-viewer.html) rather than at a /viewer/ path.
+        if (location.search) location.replace(location.pathname + '#' + params.toString());
         return;
       }
 
-      window.location = '/';
+      // No host param: fall through to the viewer's own connect overlay,
+      // which prompts for a peer ID. Bouncing to the site root would make
+      // manual entry unreachable in portable deployments.
+      return;
     })();
   </script>
   <script src="../lib/viewer-utils.js"></script>

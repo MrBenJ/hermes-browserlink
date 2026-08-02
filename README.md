@@ -87,7 +87,9 @@ with a tab switcher, and the host answers tab-list and tab-switch requests
 can enumerate and switch to any other **web** tab in that browser profile
 — including unrelated logged-in sessions. Only `http:`/`https:` tabs are
 capturable; browser-internal, extension, `file://` and other non-web schemes
-are excluded.
+are excluded, as are loopback, RFC1918/LAN, link-local and other private
+hosts — a link holder cannot steer the agent's browser at `127.0.0.1`,
+router admin panels or cloud metadata endpoints.
 
 So the Viewer URL is a bearer capability over the agent browser's normal
 tabs, not a keyhole onto one of them. The host ID is a random 122-bit UUID,

@@ -18,8 +18,9 @@ their credentials.
 > **⚠️ Scope of the share.** The viewer is not limited to the hosted tab. It
 > ships with a tab switcher, and the host answers tab-list and tab-switch
 > requests, so whoever holds a Viewer URL can enumerate and switch to any
-> other **web** tab in this browser profile (only `http:`/`https:` are
-> capturable; browser-internal, extension and `file://` tabs are excluded).
+> other **web** tab in this browser profile (only public `http:`/`https:`
+> hosts are capturable; browser-internal, extension, `file://` and
+> loopback/LAN/link-local tabs are excluded).
 > Treat a Viewer URL as a bearer capability over this browser profile's web
 > tabs. Tell the human that before they share one,
 > and prefer a browser profile that holds only the accounts relevant to the

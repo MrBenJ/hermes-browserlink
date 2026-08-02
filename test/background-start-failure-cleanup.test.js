@@ -152,6 +152,7 @@ function loadBackground({ peerReady = false, hangHandshake = false } = {}) {
     detaches,
     sessionSets,
     handshakeArmed,
+    runtimeListeners,
     firePeerTimeout: () => peerTimeoutFn?.(),
     offscreen: {
       get closed() { return offscreenClosed; },
@@ -265,5 +266,30 @@ describe('background start-failure cleanup', () => {
     expect(result.captureMode).toBe('screencast');
     expect(methodsOf(debuggerCommands)).not.toContain('Page.stopScreencast');
     expect(hooks.getHostStateForTest().hosting).toBe(true);
+  });
+});
+
+describe('waitForPeerId listener lifecycle', () => {
+  it('removes its runtime listener when the handshake times out', async () => {
+    const { context, runtimeListeners } = loadBackground();
+    await context.__browserlinkBackgroundTestHooks.ensureHostStateLoadedForTest();
+
+    const before = runtimeListeners.length;
+    await context.handleStartHostingCDP(42);
+
+    // A failed start must not leave its peerReady listener registered.
+    expect(runtimeListeners.length).toBe(before);
+  });
+
+  it('does not accumulate listeners across repeated failed starts', async () => {
+    const { context, runtimeListeners } = loadBackground();
+    await context.__browserlinkBackgroundTestHooks.ensureHostStateLoadedForTest();
+
+    const before = runtimeListeners.length;
+    await context.handleStartHostingCDP(42);
+    await context.handleStartHostingCDP(42);
+    await context.handleStartHostingCDP(42);
+
+    expect(runtimeListeners.length).toBe(before);
   });
 });

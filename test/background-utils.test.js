@@ -271,3 +271,39 @@ describe('isForbiddenTab scheme policy', () => {
     expect(forbid('CHROME://settings')).toBe(true);
   });
 });
+
+describe('isForbiddenTab private-network policy', () => {
+  const forbid = (url) => isForbiddenTab({ id: 1, url });
+
+  it('allows ordinary public web hosts', () => {
+    expect(forbid('https://example.com/a')).toBe(false);
+    expect(forbid('https://sub.example.co.uk')).toBe(false);
+    expect(forbid('http://172.32.0.9')).toBe(false); // just outside RFC1918
+  });
+
+  it('refuses loopback', () => {
+    expect(forbid('http://127.0.0.1:8787/x')).toBe(true);
+    expect(forbid('http://127.1.2.3')).toBe(true);
+    expect(forbid('http://localhost:3000')).toBe(true);
+    expect(forbid('http://[::1]:80')).toBe(true);
+    expect(forbid('http://0.0.0.0')).toBe(true);
+  });
+
+  it('refuses RFC1918 and CGNAT ranges', () => {
+    expect(forbid('http://10.0.0.5')).toBe(true);
+    expect(forbid('http://192.168.1.1')).toBe(true);
+    expect(forbid('http://172.16.0.9')).toBe(true);
+    expect(forbid('http://172.31.255.254')).toBe(true);
+    expect(forbid('https://100.64.0.1')).toBe(true);
+  });
+
+  it('refuses link-local and cloud metadata', () => {
+    expect(forbid('http://169.254.169.254/latest/meta-data')).toBe(true);
+  });
+
+  it('refuses internal hostnames', () => {
+    expect(forbid('http://intranet')).toBe(true);
+    expect(forbid('http://router.local')).toBe(true);
+    expect(forbid('http://box.internal')).toBe(true);
+  });
+});

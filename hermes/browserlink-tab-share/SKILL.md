@@ -56,8 +56,9 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
 - **A Viewer URL grants more than the hosted tab.** The viewer has a tab
   switcher, and the host answers tab-list and tab-switch requests, so anyone
   holding the link can enumerate and switch to any other **web** tab in this
-  browser profile (`http:`/`https:` only; browser-internal, extension and
-  `file://` tabs are excluded). When you
+  browser profile (`http:`/`https:` public hosts only; browser-internal,
+  extension, `file://`, and loopback/LAN/link-local tabs are excluded).
+  When you
   hand over a link, say so plainly — do not describe it as access to one
   tab. If the profile holds sensitive unrelated sessions, warn the human
   before sharing.

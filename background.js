@@ -889,12 +889,22 @@ async function handleStopHosting(reason = 'manual') {
 
 function waitForPeerId() {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Peer setup timeout')), 15000);
+    // Both paths must tear down, or a failed start leaves its listener behind
+    // for the life of the worker; repeated failures stack them up and a later
+    // peerReady fans out through every stale one before they self-remove.
+    function cleanup() {
+      clearTimeout(timeout);
+      chrome.runtime.onMessage.removeListener(listener);
+    }
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Peer setup timeout'));
+    }, 15000);
 
     function listener(msg) {
-      if (msg.action === 'peerReady') {
-        clearTimeout(timeout);
-        chrome.runtime.onMessage.removeListener(listener);
+      if (msg && msg.action === 'peerReady') {
+        cleanup();
         resolve(msg.peerId);
       }
     }

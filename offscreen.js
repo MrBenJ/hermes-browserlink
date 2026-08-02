@@ -167,9 +167,29 @@ function setupPeer() {
 
   peer.on('connection', (conn) => {
     log('[BROWSERLINK:offscreen] Data connection from viewer (waiting for open)');
+
+    // Single-viewer ownership. Hosting is a one-viewer session, so a new
+    // connection supersedes the previous one. Close the old connection and
+    // fence every handler on `conn === dataConnection`, otherwise a stale
+    // peer-ID holder keeps forwarding input and control events — and this
+    // extension drives the hosted tab through chrome.debugger, so that is
+    // privileged control, not just a duplicate video feed.
+    const previous = dataConnection;
     dataConnection = conn;
+    if (previous && previous !== conn) {
+      log('[BROWSERLINK:offscreen] Superseding previous viewer connection');
+      try {
+        previous.close();
+      } catch (e) {
+        warn('[BROWSERLINK:offscreen] Failed to close superseded connection:', e.message || e);
+      }
+    }
 
     conn.on('open', () => {
+      if (conn !== dataConnection) {
+        log('[BROWSERLINK:offscreen] Ignoring open from superseded connection');
+        return;
+      }
       log('[BROWSERLINK:offscreen] Data channel open, notifying background');
       sendToViewer({ type: 'hostMode', mode: 'screencast' });
       sendViewportInfo();
@@ -178,6 +198,10 @@ function setupPeer() {
     });
 
     conn.on('data', (data) => {
+      if (conn !== dataConnection) {
+        warn('[BROWSERLINK:offscreen] Dropping data from superseded connection');
+        return;
+      }
       const evt = typeof data === 'string' ? JSON.parse(data) : data;
 
       if (INPUT_TYPES.has(evt.type)) {
@@ -193,6 +217,10 @@ function setupPeer() {
     });
 
     conn.on('close', () => {
+      if (conn !== dataConnection) {
+        log('[BROWSERLINK:offscreen] Superseded connection closed; active viewer unaffected');
+        return;
+      }
       log('[BROWSERLINK:offscreen] Data connection closed');
       dataConnection = null;
       chrome.runtime.sendMessage({ action: 'viewerDisconnected' });

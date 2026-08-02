@@ -1,0 +1,14 @@
+{
+  "name": "lobsterlink",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:client",
+    "dev:client": "serve client --listen ${PORT:-4173}",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "devDependencies": {
+    "serve": "^14.2.3",
+    "vitest": "^1.6.0"
+  }
+}

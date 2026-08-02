@@ -4,6 +4,14 @@
 **Task:** Plan Task 1 — "Characterize agent-browser"
 **Result:** ⛔ **NOT RUNNABLE — Hermes is not installed on this machine.**
 
+> **Update 2026-08-02:** the environment finding below is still accurate,
+> but it no longer stops the run — Ben scoped this session to skip all E2E
+> and do the repo-local work here. Hermes' browser configuration was
+> instead characterized by reading a real install's source over SSH; see
+> [`02-hermes-browser-config.md`](./02-hermes-browser-config.md). The
+> "Consequence for the plan" table below reflects the original stop, not
+> the final outcome — see [`../final-report.md`](../final-report.md).
+
 Phase 0 gates everything. It could not be executed, so no spike findings
 exist for Tasks 1–5. This document records why, with the evidence, so the
 run can be resumed on a correctly-provisioned machine without re-deriving

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm run test:run
+
+      - name: Viewer build
+        run: npm run build:viewer
+
+      # Self-containment of the artifact (no external <script src> or
+      # stylesheet <link>) is asserted by test/build-viewer.test.js above;
+      # this only catches a build that silently produced nothing.
+      - name: Assert viewer artifact is non-empty
+        run: test -s dist/browserlink-viewer.html
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Fails the build on high or critical advisories in the committed
+      # lockfile. Moderate and below are reported by `npm audit` locally but
+      # do not gate, so routine transitive churn does not block merges.
+      - name: npm audit
+        run: npm audit --audit-level=high

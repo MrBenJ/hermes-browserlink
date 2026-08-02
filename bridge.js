@@ -48,13 +48,8 @@ const state = {
 const REFRESH_INTERVAL_MS = 1500;
 const MAX_BRIDGE_LOGS = 80;
 
-function isForbiddenTab(tab) {
-  if (!tab || !tab.url) return true;
-  return tab.url.startsWith('chrome-extension://') ||
-    tab.url.startsWith('chrome://') ||
-    tab.url.startsWith('edge://') ||
-    tab.url.startsWith('about:');
-}
+// isForbiddenTab comes from lib/background-utils.js, loaded before this
+// script, so the capturable-scheme policy is shared with the service worker.
 
 function pushBridgeLog(event, details = {}) {
   const entry = {

@@ -76,13 +76,8 @@ async function refreshHostStatus() {
   }
 }
 
-function isForbiddenTab(tab) {
-  if (!tab || !tab.url) return true;
-  return tab.url.startsWith('chrome-extension://') ||
-    tab.url.startsWith('chrome://') ||
-    tab.url.startsWith('edge://') ||
-    tab.url.startsWith('about:');
-}
+// isForbiddenTab comes from lib/background-utils.js, loaded before this
+// script, so the capturable-scheme policy is shared with the service worker.
 
 hostStart.addEventListener('click', async () => {
   hostStart.disabled = true;

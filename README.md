@@ -23,7 +23,12 @@ step. You close the tab. The agent keeps the authenticated session and goes
 back to work.
 
 No credentials shared. No extension installed on your machine. No remote
-desktop. Just one tab, just the blocked step, then you're out.
+desktop. Just the blocked step, then you're out.
+
+One thing to be clear about up front: the link is scoped to the agent's
+browser, not to a single tab. The viewer has a tab switcher, so whoever
+holds the link can reach the other web tabs in that browser profile too —
+see [What the link actually grants](#%EF%B8%8F-what-the-link-actually-grants).
 
 ## Is this for you
 

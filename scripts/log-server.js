@@ -4,7 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const port = Number(process.env.PORT || 8787);
+const port = Number(process.env.PORT || 8788);
 const host = process.env.HOST || '127.0.0.1';
 const logDir = path.resolve(process.env.LOG_DIR || path.join(__dirname, '..', 'logs'));
 const logFile = path.resolve(process.env.LOG_FILE || path.join(logDir, 'browserlink-debug.jsonl'));

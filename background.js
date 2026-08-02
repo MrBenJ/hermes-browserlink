@@ -4,7 +4,7 @@
 importScripts('lib/share-timeout-utils.js', 'lib/background-utils.js', 'lib/bridge-utils.js');
 
 const SCREENCAST_JPEG_QUALITY = 92;
-const DIAGNOSTIC_LOG_URL = 'http://127.0.0.1:8787/log';
+const DIAGNOSTIC_LOG_URL = 'http://127.0.0.1:8788/log';
 const HOST_STATE_STORAGE_KEY = 'browserlinkHostState';
 
 const DEFAULT_HOST_STATE = {

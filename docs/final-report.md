@@ -99,6 +99,36 @@ This is source-derived, **not observed**. It is the first thing to check if
 the extension does not appear in CDP `/json/list`. Full detail:
 [`spikes/02-hermes-browser-config.md`](./spikes/02-hermes-browser-config.md).
 
+## ⚠️ Needs your decision: share expiry is best-effort
+
+Both reviewers flagged this; Aria escalated it to a merge blocker and gave
+two acceptable remedies. **I took the second one and am escalating the
+first to you.**
+
+**The gap.** The 15-minute share expiry runs on a `setTimeout` inside the
+MV3 service worker (`background.js:244`). Chrome can suspend that worker
+while idle and the timer dies with it. Expiry is correctly re-enforced from
+`storage.session` on the next wake, and any viewer message wakes the worker
+— so an *interactive* viewer is always cut off on time. But a viewer that
+sends nothing can keep receiving frames past `shareExpiresAt` until
+something else wakes the worker.
+
+**What I did:** made the promise honest everywhere the operator sees it —
+the bridge status note, README gotchas, and a skill rule telling the agent
+not to describe the share as ending automatically. Plus the code comment at
+the timer.
+
+**What I did NOT do, and why:** closing the gap properly needs Chrome's
+durable scheduled-wakeup API. That means (a) adding a new extension
+permission, which changes the install-time consent prompt a human is asked
+to review, and (b) reversing `test/no-alarms.test.js`, an explicit upstream
+decision that pins the extension as free of that API. Both are product calls
+that belong to you, not something to slip into a port under review pressure.
+
+**Your options:** accept best-effort expiry as documented, or tell me to add
+the permission and durable wake-up and invert that test. It is maybe an
+hour's work either way.
+
 ## Decisions made without you
 
 1. **Branch `feat/initial-port`** — handoff said `feature/`, plan and

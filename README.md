@@ -211,6 +211,15 @@ viewer link"*, *"use my logged-in tab"*, *"stop sharing"*.
   `bridge.html`; state persists.
 - **`chrome-extension://` navigation blocked.** Open the bridge through CDP
   target creation instead.
+- **Share expiry is best-effort, not a hard cutoff.** The 15-minute
+  countdown runs on an MV3 service-worker `setTimeout`. Chrome can suspend
+  the worker while idle, and expiry is then re-enforced on the next wake.
+  Any viewer message wakes it, so an interactive viewer is always cut off
+  on time — but a viewer that sends nothing can keep receiving frames past
+  `shareExpiresAt`. **Click Stop Host to actually end a share.** Closing
+  this gap needs a durable scheduled wake-up, which means a new extension
+  permission and reversing `test/no-alarms.test.js` — see
+  `docs/final-report.md`.
 - **Empty Viewer URL field.** The bridge shows *"Set Viewer Base URL to get
   a shareable link"* until a base URL is configured. That's not a bug — it
   is refusing to emit a dead link.

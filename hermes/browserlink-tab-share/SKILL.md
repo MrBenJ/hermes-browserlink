@@ -64,6 +64,11 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
 - **Only one viewer at a time.** If a second person opens the same Viewer
   URL they take over the session and the first is disconnected. Do not
   hand the same link to two people and expect both to watch.
+- **Share expiry is best-effort.** The countdown runs on an MV3
+  service-worker timer that Chrome may suspend, so an idle viewer can keep
+  receiving frames past the deadline. Do not tell the human the share
+  "will end automatically in 15 minutes" as if it were guaranteed — click
+  **Stop Host** when the share should actually end.
 - Verify bridge state before claiming success. Return concrete evidence,
   not assumptions. A visible popup is not proof that hosting started.
 - Prefer the bridge path, not the popup click path.

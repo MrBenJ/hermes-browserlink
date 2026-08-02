@@ -111,6 +111,7 @@ function loadBackground({ peerReady = false, hangHandshake = false } = {}) {
     chrome,
     console,
     clearTimeout,
+    URL,
     fetch: async () => ({}),
     self: null,
     __BROWSERLINK_ENABLE_TEST_HOOKS__: true,

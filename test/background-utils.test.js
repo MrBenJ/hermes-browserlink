@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildViewerTabList,
   getCaptureSize,
+  isForbiddenTab,
   normalizeViewportDimension,
   VIEWPORT_MIN_DIMENSION,
   VIEWPORT_MAX_DIMENSION,
@@ -225,5 +226,48 @@ describe('normalizeViewportDimension', () => {
 
   it('clamps values above the maximum', () => {
     expect(normalizeViewportDimension(10_000_000)).toBe(VIEWPORT_MAX_DIMENSION);
+  });
+});
+
+describe('isForbiddenTab scheme policy', () => {
+  const forbid = (url) => isForbiddenTab({ id: 1, url });
+
+  it('allows ordinary web pages', () => {
+    expect(forbid('https://example.com/a')).toBe(false);
+    expect(forbid('http://example.com/a')).toBe(false);
+  });
+
+  it('forbids browser-internal and extension surfaces', () => {
+    expect(forbid('chrome://settings')).toBe(true);
+    expect(forbid('chrome-extension://abc/bridge.html')).toBe(true);
+    expect(forbid('edge://settings')).toBe(true);
+    expect(forbid('about:blank')).toBe(true);
+    expect(forbid('devtools://devtools/bundled/inspector.html')).toBe(true);
+    expect(forbid('chrome-untrusted://terminal')).toBe(true);
+    expect(forbid('chrome-search://local-ntp/local-ntp.html')).toBe(true);
+    expect(forbid('view-source:https://example.com')).toBe(true);
+  });
+
+  it('forbids local file access', () => {
+    expect(forbid('file:///Users/someone/.ssh/id_rsa')).toBe(true);
+  });
+
+  it('forbids non-http schemes generally', () => {
+    expect(forbid('data:text/html,<h1>x</h1>')).toBe(true);
+    expect(forbid('javascript:alert(1)')).toBe(true);
+    expect(forbid('ftp://example.com/f')).toBe(true);
+    expect(forbid('blob:https://example.com/uuid')).toBe(true);
+  });
+
+  it('treats a missing or malformed url as forbidden', () => {
+    expect(isForbiddenTab(null)).toBe(true);
+    expect(isForbiddenTab({ id: 1 })).toBe(true);
+    expect(forbid('')).toBe(true);
+    expect(forbid('not a url')).toBe(true);
+  });
+
+  it('is case-insensitive about the scheme', () => {
+    expect(forbid('HTTPS://example.com')).toBe(false);
+    expect(forbid('CHROME://settings')).toBe(true);
   });
 });

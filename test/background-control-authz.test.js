@@ -14,6 +14,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   const removed = [];
   const windowUpdates = [];
   const debuggerCommands = [];
+  const updates = [];
   const listeners = () => ({ addListener() {}, removeListener() {} });
 
   const chrome = {
@@ -49,10 +50,10 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
         return { id: tabId, windowId: 7, width: 1024, height: 768, url, title: 'Tab' };
       },
       remove: async (tabId) => { removed.push(tabId); },
+      update: async (tabId, info) => { updates.push({ tabId, info }); },
       query: async () => [],
       getZoom: async () => 1,
       setZoom: async () => {},
-      update: async () => {},
       sendMessage: async () => {},
       onActivated: listeners(),
       onUpdated: listeners(),
@@ -68,6 +69,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   const fetchCalls = [];
   const context = {
     chrome, console, setTimeout, clearTimeout,
+    URL,
     fetch: async (...args) => { fetchCalls.push(args); return {}; },
     self: null,
     __BROWSERLINK_ENABLE_TEST_HOOKS__: true
@@ -82,8 +84,9 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   vm.runInContext(readFileSync(join(repoRoot, 'background.js'), 'utf8'), context, {
     filename: 'background.js'
   });
+  context.__handleControlEvent = context.__browserlinkBackgroundTestHooks.handleControlEventForTest;
 
-  return { context, removed, windowUpdates, debuggerCommands, fetchCalls };
+  return { context, removed, windowUpdates, debuggerCommands, fetchCalls, updates };
 }
 
 const NORMAL = 11;
@@ -186,5 +189,40 @@ describe('diagnostics stay local', () => {
     await hooks.closeTabForTest(EXTENSION_TAB);
 
     expect(fetchCalls).toEqual([]);
+  });
+});
+
+describe('navigate scheme policy', () => {
+  async function withHost() {
+    const loaded = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = loaded.context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({ capturedTabId: NORMAL, debuggerAttached: true });
+    return { ...loaded, hooks };
+  }
+
+  it('navigates to an ordinary https url', async () => {
+    const { hooks, updates } = await withHost();
+    await hooks.handleControlEventForTest({ type: 'navigate', url: 'https://example.org/x' });
+    expect(updates).toContainEqual({ tabId: NORMAL, info: { url: 'https://example.org/x' } });
+  });
+
+  it('treats bare input as a hostname', async () => {
+    const { hooks, updates } = await withHost();
+    await hooks.handleControlEventForTest({ type: 'navigate', url: 'example.org' });
+    expect(updates).toContainEqual({ tabId: NORMAL, info: { url: 'https://example.org' } });
+  });
+
+  it('refuses to navigate the hosted tab to chrome://', async () => {
+    const { hooks, updates } = await withHost();
+    await hooks.handleControlEventForTest({ type: 'navigate', url: 'chrome://settings' });
+    expect(updates).toEqual([]);
+  });
+
+  it('refuses file:// and javascript: navigation', async () => {
+    const { hooks, updates } = await withHost();
+    await hooks.handleControlEventForTest({ type: 'navigate', url: 'file:///etc/passwd' });
+    await hooks.handleControlEventForTest({ type: 'navigate', url: 'javascript:alert(1)' });
+    expect(updates).toEqual([]);
   });
 });

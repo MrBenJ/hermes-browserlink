@@ -270,6 +270,12 @@ function setupPeer() {
       }
       log('[BROWSERLINK:offscreen] Data connection closed');
       dataConnection = null;
+      activeViewerPeerId = null;
+      // The media call is a separate WebRTC connection, so dropping the data
+      // channel does not stop the video. Without this the viewer keeps seeing
+      // the hosted tab while the host reports it as disconnected.
+      closeCurrentCall('its data connection closed');
+      stopFrameTicker();
       chrome.runtime.sendMessage({ action: 'viewerDisconnected' });
     });
 

@@ -550,14 +550,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // --- Tab URL validation ---
 
-function isForbiddenTab(tab) {
-  if (!tab || !tab.url) return true;
-  const url = tab.url;
-  return url.startsWith('chrome-extension://') ||
-    url.startsWith('chrome://') ||
-    url.startsWith('edge://') ||
-    url.startsWith('about:');
-}
+// isForbiddenTab comes from lib/background-utils.js (see importScripts above),
+// so the capturable-scheme policy is defined in exactly one place.
 
 async function findCapturableTab() {
   // 1. Prefer active tab in current window
@@ -1414,8 +1408,18 @@ async function handleControlEvent(evt) {
       case 'navigate':
         if (hostState.capturedTabId && evt.url) {
           let url = evt.url;
-          if (!/^https?:\/\//i.test(url) && !url.startsWith('chrome://')) {
+          // Bare input from the viewer's URL bar is treated as a hostname.
+          if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
             url = 'https://' + url;
+          }
+          // Same capturable-scheme policy as listing, switching and closing.
+          // Previously this preserved chrome:// and handed it to tabs.update,
+          // letting a viewer navigate the hosted tab somewhere it is then
+          // forbidden to capture or close.
+          if (isForbiddenTab({ id: hostState.capturedTabId, url })) {
+            warn('[BROWSERLINK:bg] navigate blocked: forbidden URL', url);
+            logDiagnostic('navigate_blocked', { tabId: hostState.capturedTabId, url });
+            break;
           }
           await chrome.tabs.update(hostState.capturedTabId, { url });
         }
@@ -2267,7 +2271,8 @@ if (self.__BROWSERLINK_ENABLE_TEST_HOOKS__) {
     onTabUpdatedForTest: onTabUpdated,
     reconcileCapturedTabScreencastGeometryForTest: reconcileCapturedTabScreencastGeometry,
     closeTabForTest: closeTab,
-    setHostViewportForTest: setHostViewport
+    setHostViewportForTest: setHostViewport,
+    handleControlEventForTest: handleControlEvent
   };
 }
 

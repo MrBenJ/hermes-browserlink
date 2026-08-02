@@ -226,6 +226,47 @@ describe('offscreen viewer ownership', () => {
     expect(messages.filter((m) => m.action === 'viewerConnected')).toHaveLength(1);
   });
 
+  it('closes the media call when its owning data connection closes', () => {
+    const { peerHandlers } = loadOffscreen();
+    const conn = makeConn('only');
+    peerHandlers.connection(conn);
+    const call = makeCall(conn.peer);
+    peerHandlers.call(call);
+
+    conn.fire('close');
+
+    expect(call.closed).toBe(true);
+  });
+
+  it('stops the frame ticker when the owning data connection closes', () => {
+    const { peerHandlers, ticker } = loadOffscreen();
+    const conn = makeConn('only');
+    peerHandlers.connection(conn);
+    peerHandlers.call(makeCall(conn.peer));
+
+    const stopsBefore = ticker.stops;
+    conn.fire('close');
+
+    expect(ticker.stops).toBeGreaterThan(stopsBefore);
+  });
+
+  it('clears ownership so a later caller is not measured against a dead viewer', () => {
+    const { peerHandlers } = loadOffscreen();
+    const conn = makeConn('only');
+    peerHandlers.connection(conn);
+    peerHandlers.call(makeCall(conn.peer));
+    conn.fire('close');
+
+    // With ownership cleared, the next viewer's call is accepted normally.
+    const next = makeConn('next');
+    peerHandlers.connection(next);
+    const nextCall = makeCall(next.peer);
+    peerHandlers.call(nextCall);
+
+    expect(nextCall.answered).toBe(true);
+    expect(nextCall.closed).toBe(false);
+  });
+
   it('reports viewerDisconnected when the active connection closes', () => {
     const { peerHandlers, messages } = loadOffscreen();
     const only = makeConn('only');

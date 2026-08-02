@@ -79,9 +79,10 @@ or your files, and no credentials change hands.
 **On the agent's machine:** more than the one hosted tab. The viewer ships
 with a tab switcher, and the host answers tab-list and tab-switch requests
 (`sendTabListToViewer` → `chrome.tabs.query({})`), so whoever holds the link
-can enumerate and switch to any other **normal** tab in that browser profile
-— including unrelated logged-in sessions. `chrome://` and extension pages
-are excluded, but that is the only limit.
+can enumerate and switch to any other **web** tab in that browser profile
+— including unrelated logged-in sessions. Only `http:`/`https:` tabs are
+capturable; browser-internal, extension, `file://` and other non-web schemes
+are excluded.
 
 So the Viewer URL is a bearer capability over the agent browser's normal
 tabs, not a keyhole onto one of them. The host ID is a random 122-bit UUID,

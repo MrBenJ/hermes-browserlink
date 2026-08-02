@@ -2,6 +2,8 @@
   "name": "browserlink",
   "private": true,
   "scripts": {
+    "build:viewer": "node scripts/build-viewer.js",
+    "serve:viewer": "bash scripts/serve-viewer.sh",
     "dev": "npm run dev:client",
     "dev:client": "serve client --listen ${PORT:-4173}",
     "test": "vitest",

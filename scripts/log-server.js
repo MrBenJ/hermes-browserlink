@@ -7,7 +7,7 @@ const path = require('path');
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';
 const logDir = path.resolve(process.env.LOG_DIR || path.join(__dirname, '..', 'logs'));
-const logFile = path.resolve(process.env.LOG_FILE || path.join(logDir, 'lobsterlink-debug.jsonl'));
+const logFile = path.resolve(process.env.LOG_FILE || path.join(logDir, 'browserlink-debug.jsonl'));
 
 fs.mkdirSync(logDir, { recursive: true });
 
@@ -78,6 +78,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`LobsterLink log server listening on http://${host}:${port}`);
+  console.log(`BrowserLink log server listening on http://${host}:${port}`);
   console.log(`Writing logs to ${logFile}`);
 });

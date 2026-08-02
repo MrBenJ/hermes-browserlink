@@ -31,7 +31,7 @@ function createChromeStub(options = {}) {
     storage: {
       local: {
         get(_defaults, callback) {
-          callback({ lobsterlinkDebugLoggingEnabled: false });
+          callback({ browserlinkDebugLoggingEnabled: false });
         }
       },
       session: {
@@ -123,7 +123,7 @@ function loadBackground(options = {}) {
     clearTimeout,
     fetch: async () => ({}),
     self: null,
-    __LOBSTERLINK_ENABLE_TEST_HOOKS__: true
+    __BROWSERLINK_ENABLE_TEST_HOOKS__: true
   };
   context.self = context;
   vm.createContext(context);
@@ -142,7 +142,7 @@ function loadBackground(options = {}) {
 describe('background navigation screencast reconciliation', () => {
   it('reconciles captured-tab screencast geometry after navigation completes', async () => {
     const { context, sentRuntimeMessages, debuggerCommands } = loadBackground();
-    const hooks = context.__lobsterlinkBackgroundTestHooks;
+    const hooks = context.__browserlinkBackgroundTestHooks;
 
     expect(hooks).toBeTruthy();
     await hooks.ensureHostStateLoadedForTest();
@@ -211,7 +211,7 @@ describe('background navigation screencast reconciliation', () => {
         return undefined;
       }
     });
-    const hooks = context.__lobsterlinkBackgroundTestHooks;
+    const hooks = context.__browserlinkBackgroundTestHooks;
 
     await hooks.ensureHostStateLoadedForTest();
     hooks.setHostStateForTest({
@@ -274,7 +274,7 @@ describe('background navigation screencast reconciliation', () => {
         return undefined;
       }
     });
-    const hooks = context.__lobsterlinkBackgroundTestHooks;
+    const hooks = context.__browserlinkBackgroundTestHooks;
 
     await hooks.ensureHostStateLoadedForTest();
     hooks.setHostStateForTest({
@@ -315,7 +315,7 @@ describe('background navigation screencast reconciliation', () => {
 
   it('does not restart screencast when capture size is unchanged without force', async () => {
     const { context, sentRuntimeMessages, debuggerCommands } = loadBackground();
-    const hooks = context.__lobsterlinkBackgroundTestHooks;
+    const hooks = context.__browserlinkBackgroundTestHooks;
 
     await hooks.ensureHostStateLoadedForTest();
     hooks.setHostStateForTest({

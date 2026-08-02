@@ -141,7 +141,7 @@ viewerConnect.addEventListener('click', async () => {
   viewerConnect.disabled = true;
   viewerStatus.textContent = 'Opening viewer...';
 
-  // Open public LobsterLink viewer
+  // Open public BrowserLink viewer
   const url = buildViewerUrl(peerId);
   chrome.tabs.create({ url });
 

@@ -1,13 +1,13 @@
 (() => {
-  if (window.__lobsterlinkHostAgentInstalled) {
+  if (window.__browserlinkHostAgentInstalled) {
     notifyReady();
     return;
   }
-  window.__lobsterlinkHostAgentInstalled = true;
+  window.__browserlinkHostAgentInstalled = true;
 
-  const cursorRootId = '__lobsterlink_remote_cursor_root';
-  const hostOverlayId = '__lobsterlink_host_id_overlay';
-  const hoverOutlineId = '__lobsterlink_hover_outline';
+  const cursorRootId = '__browserlink_remote_cursor_root';
+  const hostOverlayId = '__browserlink_host_id_overlay';
+  const hoverOutlineId = '__browserlink_hover_outline';
   const vendorPattern = /(1password|lastpass|dashlane|bitwarden)/i;
   const directSelectors = [
     'iframe[src^="chrome-extension://"]',
@@ -135,7 +135,7 @@
     el.style?.setProperty('visibility', 'hidden', 'important');
     el.style?.setProperty('opacity', '0', 'important');
     el.style?.setProperty('pointer-events', 'none', 'important');
-    el.setAttribute('data-lobsterlink-suppressed', '1');
+    el.setAttribute('data-browserlink-suppressed', '1');
     return true;
   }
 
@@ -178,7 +178,7 @@
   // practical layering we can do from a page-agent content script: only the
   // browser's native top-layer (open <dialog>, fullscreen element) can still
   // paint above us.
-  const overlayRootId = '__lobsterlink_overlay_root';
+  const overlayRootId = '__browserlink_overlay_root';
 
   function ensureOverlayRoot() {
     if (!document.documentElement) return null;
@@ -230,14 +230,14 @@
 
     // Expose idempotent window helpers; they look up the dot each call so
     // they keep working across re-injections and re-parenting.
-    window.__lobsterlinkUpdateRemoteCursor = (x, y, visible = true) => {
+    window.__browserlinkUpdateRemoteCursor = (x, y, visible = true) => {
       ensureOverlayRoot();
       const d = document.getElementById(cursorRootId);
       if (!d) return;
       d.style.transform = `translate(${Math.round(x - 9)}px, ${Math.round(y - 9)}px)`;
       d.style.opacity = visible ? '1' : '0';
     };
-    window.__lobsterlinkHideRemoteCursor = () => {
+    window.__browserlinkHideRemoteCursor = () => {
       const d = document.getElementById(cursorRootId);
       if (d) d.style.opacity = '0';
     };
@@ -395,7 +395,7 @@
       badge.textContent = '';
       return;
     }
-    badge.textContent = 'LobsterLink host: ' + peerId;
+    badge.textContent = 'BrowserLink host: ' + peerId;
     badge.style.display = 'block';
   }
 

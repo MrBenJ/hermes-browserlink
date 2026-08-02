@@ -1,5 +1,5 @@
 {
-  "name": "lobsterlink",
+  "name": "browserlink",
   "private": true,
   "scripts": {
     "dev": "npm run dev:client",

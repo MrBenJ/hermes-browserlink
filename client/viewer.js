@@ -1,4 +1,4 @@
-// LobsterLink Viewer - connects to host, renders video, captures and sends input
+// BrowserLink Viewer - connects to host, renders video, captures and sends input
 
 const video = document.getElementById('remote-video');
 const videoContainer = document.getElementById('video-container');
@@ -131,7 +131,7 @@ function connect(hostPeerId) {
       setStatus('Connected', 'connected');
       overlay.classList.add('hidden');
       overlayMsg.textContent = '';
-      log('[LOBSTERLINK:viewer] Data channel open, connected to host');
+      log('[BROWSERLINK:viewer] Data channel open, connected to host');
 
       // Request tab list on connect
       sendControl({ type: 'listTabs' });
@@ -156,10 +156,10 @@ function connect(hostPeerId) {
 
     mediaCall.on('stream', (remoteStream) => {
       video.srcObject = remoteStream;
-      log('[LOBSTERLINK:viewer] Remote stream received, tracks:', remoteStream.getTracks().length);
+      log('[BROWSERLINK:viewer] Remote stream received, tracks:', remoteStream.getTracks().length);
       layoutVideo();
       updateDebugPanel();
-      video.play().catch(e => error('[LOBSTERLINK:viewer] play() failed:', e));
+      video.play().catch(e => error('[BROWSERLINK:viewer] play() failed:', e));
     });
 
     mediaCall.on('close', () => {
@@ -331,7 +331,7 @@ function handleHostMessage(msg) {
       remoteViewport.width = msg.width;
       remoteViewport.height = msg.height;
       hasRemoteViewport = true;
-      log('[LOBSTERLINK:viewer] Remote viewport:', msg.width, 'x', msg.height);
+      log('[BROWSERLINK:viewer] Remote viewport:', msg.width, 'x', msg.height);
       layoutVideo();
       updateDebugPanel();
       scheduleAutoViewportIfKnownViewportMismatch({ immediate: true });
@@ -340,7 +340,7 @@ function handleHostMessage(msg) {
     case 'tabChanged':
       urlBar.value = msg.url || '';
       currentTabId = msg.tabId;
-      document.title = `LobsterLink - ${msg.title || 'Remote Tab'}`;
+      document.title = `BrowserLink - ${msg.title || 'Remote Tab'}`;
       // Highlight active tab in dropdown
       if (tabSelect.value !== String(msg.tabId)) {
         tabSelect.value = String(msg.tabId);
@@ -416,10 +416,10 @@ tabSelect.addEventListener('change', () => {
 
 function sendControl(evt) {
   if (!dataConn || !dataConn.open) {
-    warn('[LOBSTERLINK:viewer] sendControl dropped (no connection):', evt.type);
+    warn('[BROWSERLINK:viewer] sendControl dropped (no connection):', evt.type);
     return;
   }
-  log('[LOBSTERLINK:viewer] Sending control:', evt.type);
+  log('[BROWSERLINK:viewer] Sending control:', evt.type);
   dataConn.send(JSON.stringify(evt));
 }
 
@@ -544,7 +544,7 @@ function sendInput(evt) {
     const detail = evt.type === 'mouse'
       ? `(${evt.x},${evt.y})`
       : (evt.type === 'clipboard' ? '[clipboard text hidden]' : (evt.key || evt.text || ''));
-    log('[LOBSTERLINK:viewer] Sending input:', evt.type, evt.action, detail);
+    log('[BROWSERLINK:viewer] Sending input:', evt.type, evt.action, detail);
   }
   dataConn.send(JSON.stringify(evt));
 }
@@ -1268,7 +1268,7 @@ video.addEventListener('click', () => {
 });
 video.addEventListener('loadedmetadata', () => {
   layoutVideo();
-  log('[LOBSTERLINK:viewer] Video metadata - intrinsic:',
+  log('[BROWSERLINK:viewer] Video metadata - intrinsic:',
     video.videoWidth, 'x', video.videoHeight,
     '| remote viewport:', remoteViewport.width, 'x', remoteViewport.height);
   updateDebugPanel();
@@ -1280,7 +1280,7 @@ video.addEventListener('resize', () => {
 video.addEventListener('playing', () => {
   layoutVideo();
   focusVideoForInput();
-  log('[LOBSTERLINK:viewer] Video playing - intrinsic:',
+  log('[BROWSERLINK:viewer] Video playing - intrinsic:',
     video.videoWidth, 'x', video.videoHeight,
     '| remote viewport:', remoteViewport.width, 'x', remoteViewport.height);
   updateDebugPanel();

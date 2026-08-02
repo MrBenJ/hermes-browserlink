@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LobsterLink</title>
+  <title>BrowserLink</title>
   <link rel="icon"
-    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦞</text></svg>">
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔗</text></svg>">
   <meta name="description" content="Let a human complete blocked steps in an agent's browser, without sharing credentials.">
-  <meta property="og:title" content="LobsterLink">
+  <meta property="og:title" content="BrowserLink">
   <meta property="og:description" content="Let a human complete blocked steps in an agent's browser, without sharing credentials.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="LobsterLink">
+  <meta name="twitter:title" content="BrowserLink">
   <meta name="twitter:description" content="Let a human complete blocked steps in an agent's browser, without sharing credentials.">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -213,7 +213,7 @@
   </script>
   <div class="landing-inner">
     <header>
-      <p class="eyebrow">LobsterLink</p>
+      <p class="eyebrow">BrowserLink</p>
       <h1>Let a human complete blocked steps in an agent's browser, without sharing credentials.</h1>
     </header>
 
@@ -224,7 +224,7 @@
       </li>
       <li>
         <span class="step-num">2</span>
-        <span class="step-text">It sends you a <code>lobsterl.ink/#host=…</code> link.</span>
+        <span class="step-text">It sends you a viewer link ending in <code>#host=…</code>.</span>
       </li>
       <li>
         <span class="step-num">3</span>
@@ -233,7 +233,7 @@
     </ol>
 
     <div class="cta-block">
-      <p class="cta-lead">Don't have LobsterLink yet? Tell your agent to install it.</p>
+      <p class="cta-lead">Don't have BrowserLink yet? Tell your agent to install it.</p>
       <button id="copy-install" class="cta-btn">Copy install instructions for my agent</button>
     </div>
 
@@ -242,7 +242,7 @@
 
       <div class="qa">
         <h3>How does this actually work?</h3>
-        <p>LobsterLink is a Chrome extension that lives in your agent's browser. When the agent gets blocked, it opens a WebRTC tunnel so you can see and control one tab — not the rest of the agent's machine, and nothing on yours.</p>
+        <p>BrowserLink is a Chrome extension that lives in your agent's browser. When the agent gets blocked, it opens a WebRTC tunnel so you can see and control one tab — not the rest of the agent's machine, and nothing on yours.</p>
       </div>
 
       <div class="qa">
@@ -267,8 +267,8 @@
     </section>
 
     <footer class="landing-footer">
-      <span>LobsterLink</span>
-      <a href="https://github.com/davidguttman/lobsterlink">GitHub →</a>
+      <span>BrowserLink</span>
+      <a href="https://github.com/MrBenJ/hermes-browserlink">GitHub →</a>
     </footer>
   </div>
 
@@ -276,7 +276,7 @@
     (function () {
       var btn = document.getElementById('copy-install');
       if (!btn) return;
-      var installText = 'Install LobsterLink by following the instructions at https://github.com/davidguttman/lobsterlink/blob/master/AGENT-INSTALL.md. Before installing, check the downloaded files for anything suspicious or harmful. If you’re not confident it looks safe, stop and ask. When you’re finished, give me a plain English summary of what you did.';
+      var installText = 'Install BrowserLink by following the instructions at https://github.com/MrBenJ/hermes-browserlink/blob/main/INSTALL.md. Before installing, check the downloaded files for anything suspicious or harmful. If you’re not confident it looks safe, stop and ask. When you’re finished, give me a plain English summary of what you did.';
       var defaultLabel = btn.textContent;
       var resetTimer = null;
       btn.addEventListener('click', function () {

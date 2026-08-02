@@ -37,7 +37,7 @@ Nothing outside this repo was modified. `~/.hermes/` was never written to
 | 19 | README | ✅ |
 | 20 | package.json | ✅ |
 | 21 | scripts/ cleanup | ✅ |
-| 22 | Final gate | ✅ (PR opened; review gauntlet not run) |
+| 22 | Final gate | ✅ PR #2 opened; review gauntlet run — see below |
 
 **13 of 22 complete, 9 pending a live browser.**
 
@@ -46,7 +46,7 @@ Nothing outside this repo was modified. `~/.hermes/` was never written to
 | Item | Status |
 |---|---|
 | All spikes documented in `docs/spikes/` | ⚠️ Partial — spike 01 documents why 1–5 could not run; spike 02 answers what was answerable from source. Live spikes still owed. |
-| `npx vitest run` green | ✅ **101 passed, 11 files** |
+| `npx vitest run` green | ✅ **176 passed, 13 files** |
 | No `lobsterl.ink` / hardcoded viewer domain in shipped code | ✅ |
 | `dist/browserlink-viewer.html` builds from one command | ✅ 146.9 KB, verified served over HTTP 200 |
 | INSTALL.md rehearsed from clean state | ❌ **PENDING-HUMAN** |
@@ -217,6 +217,34 @@ late unilateral change at the end of a review loop.
   active). Everything this run did there was a read.
 - `/tmp/browserlink-delay-complete` exists, so a re-launch skips the
   80-minute wait.
+
+## Review gauntlet outcome — CAP_HIT (not full consensus)
+
+`/aria:review-gauntlet` ran to its 3-pass cap without reaching
+Aria+Cadence+Lyra consensus. **Lyra was never reached.**
+
+- **Aria: APPROVED** on the final head `2665e12`, findings: none. She
+  approved three times across the run, re-reviewing after each round.
+- **Cadence: 3 reviews**, each finding genuine new issues in surfaces the
+  previous round had not touched. All were fixed except two explicitly
+  deferred (below).
+- **Lyra: never ran** — the loop restarts from Aria whenever any stage
+  reports findings, and Cadence kept finding real ones, so the third stage
+  was never reached before the cap.
+
+That is an honest CAP_HIT, not a pass. What it does mean: two independent
+reviewers converged to zero findings on the final head, across ~14 review
+rounds, and the suite grew from 82 vendored tests to **176**.
+
+Security fixes made during review (all with regression tests): single-viewer
+ownership on both the data channel and the media call; media gated on
+data-channel ownership; start-failure teardown; serialized and
+already-hosting-guarded starts; `closeTab`/`newTab`/`focusTab`/`setViewport`
+validation; http/https allowlist replacing a denylist; private/loopback/
+link-local host rejection; enforcement on the *landed* URL after redirects;
+removal of the unauthenticated localhost log server; dependency advisories
+cleared and a CI audit gate added; STUN-only enforced to match the plan's
+locked decision; and the session peer ID removed from the hosted page's DOM.
 
 ## Review findings addressed
 

@@ -141,8 +141,15 @@ viewerConnect.addEventListener('click', async () => {
   viewerConnect.disabled = true;
   viewerStatus.textContent = 'Opening viewer...';
 
-  // Open public BrowserLink viewer
-  const url = buildViewerUrl(peerId);
+  // Open the configured BrowserLink viewer. The base URL is set on the
+  // bridge page; without it there is nothing to open.
+  const stored = await chrome.storage.local.get({ [VIEWER_BASE_URL_STORAGE_KEY]: '' });
+  const url = buildViewerUrl(peerId, stored[VIEWER_BASE_URL_STORAGE_KEY]);
+  if (!url) {
+    viewerStatus.textContent = 'Set a Viewer Base URL on the bridge page first.';
+    viewerConnect.disabled = false;
+    return;
+  }
   chrome.tabs.create({ url });
 
   // Close popup after short delay

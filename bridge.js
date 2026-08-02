@@ -18,6 +18,7 @@ const statusEls = {
   connectViewer: document.getElementById('bridge-connect-viewer'),
   openCurrentViewer: document.getElementById('bridge-open-current-viewer'),
   viewerUrl: document.getElementById('bridge-viewer-url'),
+  viewerBaseUrl: document.getElementById('bridge-viewer-base-url'),
   tabContext: document.getElementById('bridge-tab-context'),
   tabsBody: document.getElementById('bridge-tab-table-body'),
   refreshAll: document.getElementById('bridge-refresh-all'),
@@ -105,9 +106,47 @@ function getSelectedTabId() {
   return raw ? Number(raw) : null;
 }
 
-// buildViewerUrl and pickDefaultSelectedTab are provided as globals by
-// lib/bridge-utils.js (loaded before this script in bridge.html).
+// buildViewerUrl, normalizeViewerBaseUrl, VIEWER_BASE_URL_STORAGE_KEY and
+// pickDefaultSelectedTab are provided as globals by lib/bridge-utils.js
+// (loaded before this script in bridge.html).
 // pickDefaultSelectedTab now takes `state` as an explicit argument.
+
+// The viewer base URL the operator configured for this machine. Persisted
+// to chrome.storage.local so it survives bridge reopens and is readable by
+// the service worker and popup.
+let currentViewerBaseUrl = '';
+
+const VIEWER_URL_NO_BASE_HINT = 'Set Viewer Base URL to get a shareable link';
+const VIEWER_URL_NO_HOST_HINT = 'No active host viewer URL';
+
+// Single source of truth for the Viewer URL display. Prefers the peer id
+// typed into the connect field, falling back to the active host's peer id.
+function refreshViewerUrlField() {
+  const requestedViewerPeerId = statusEls.viewerPeerId.value.trim();
+  const peerId = requestedViewerPeerId || state.status?.peerId || '';
+  if (!peerId) {
+    statusEls.viewerUrl.textContent = VIEWER_URL_NO_HOST_HINT;
+    return;
+  }
+  const url = buildViewerUrl(peerId, currentViewerBaseUrl);
+  statusEls.viewerUrl.textContent = url || VIEWER_URL_NO_BASE_HINT;
+}
+
+function loadViewerBaseUrl() {
+  chrome.storage.local.get({ [VIEWER_BASE_URL_STORAGE_KEY]: '' }, (result) => {
+    currentViewerBaseUrl = normalizeViewerBaseUrl(result[VIEWER_BASE_URL_STORAGE_KEY]);
+    statusEls.viewerBaseUrl.value = currentViewerBaseUrl;
+    refreshViewerUrlField();
+  });
+}
+
+function saveViewerBaseUrl(rawValue) {
+  currentViewerBaseUrl = normalizeViewerBaseUrl(rawValue);
+  statusEls.viewerBaseUrl.value = currentViewerBaseUrl;
+  chrome.storage.local.set({ [VIEWER_BASE_URL_STORAGE_KEY]: currentViewerBaseUrl }, () => {
+    refreshViewerUrlField();
+  });
+}
 
 function renderTabSelect() {
   const previous = state.selectedTabId;
@@ -160,9 +199,6 @@ function renderStatus() {
       ? `${status.capturedTabId} · unavailable`
       : 'None';
 
-  const requestedViewerPeerId = statusEls.viewerPeerId.value.trim();
-  statusEls.viewerUrl.textContent = status.viewerUrl ||
-    (requestedViewerPeerId ? buildViewerUrl(requestedViewerPeerId) : 'No active host viewer URL');
   statusEls.tabContext.textContent = capturedTab
     ? [
         `tabId=${capturedTab.id}`,
@@ -175,6 +211,8 @@ function renderStatus() {
   if (!statusEls.viewerPeerId.value && status.peerId) {
     statusEls.viewerPeerId.value = status.peerId;
   }
+
+  refreshViewerUrlField();
 
   renderTabSelect();
 
@@ -462,9 +500,11 @@ async function openViewerForPeer(peerId) {
   if (!peerId) {
     throw new Error('Peer ID is required to open the viewer.');
   }
-  await chrome.tabs.create({
-    url: buildViewerUrl(peerId)
-  });
+  const url = buildViewerUrl(peerId, currentViewerBaseUrl);
+  if (!url) {
+    throw new Error('Set a Viewer Base URL before opening the viewer.');
+  }
+  await chrome.tabs.create({ url });
   setHostMessage(`Opened viewer for ${peerId}.`, 'ok');
 }
 
@@ -497,10 +537,11 @@ function bindControls() {
   });
 
   statusEls.viewerPeerId.addEventListener('input', () => {
-    const peerId = statusEls.viewerPeerId.value.trim();
-    statusEls.viewerUrl.textContent = peerId
-      ? buildViewerUrl(peerId)
-      : (state.status?.viewerUrl || 'No active host viewer URL');
+    refreshViewerUrlField();
+  });
+
+  statusEls.viewerBaseUrl.addEventListener('change', (event) => {
+    saveViewerBaseUrl(event.target.value);
   });
 
   statusEls.startHost.addEventListener('click', () => {
@@ -615,6 +656,7 @@ function bindControls() {
 }
 
 bindControls();
+loadViewerBaseUrl();
 pushBridgeLog('bridge_loaded');
 refreshAll();
 setInterval(refreshAll, REFRESH_INTERVAL_MS);

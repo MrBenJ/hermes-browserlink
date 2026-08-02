@@ -62,6 +62,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// Viewer base URL is configured on the bridge page and persisted to
+// chrome.storage.local. Without it there is no shareable viewer URL, so
+// getViewerUrl() reports null rather than emitting a dead link.
+let viewerBaseUrl = '';
+chrome.storage.local.get({ [VIEWER_BASE_URL_STORAGE_KEY]: '' }, (result) => {
+  viewerBaseUrl = normalizeViewerBaseUrl(result[VIEWER_BASE_URL_STORAGE_KEY]);
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes[VIEWER_BASE_URL_STORAGE_KEY]) {
+    viewerBaseUrl = normalizeViewerBaseUrl(changes[VIEWER_BASE_URL_STORAGE_KEY].newValue);
+  }
+});
+
 // Debug-gated console helpers — silent unless browserlinkDebugLoggingEnabled is true
 const _log = console.log.bind(console);
 const _warn = console.warn.bind(console);
@@ -246,7 +259,7 @@ async function scheduleOrEnforceHostExpiry(reason = 'schedule') {
 }
 
 function getViewerUrl(peerId) {
-  return buildViewerUrl(peerId) || null;
+  return buildViewerUrl(peerId, viewerBaseUrl) || null;
 }
 
 function getStatusPayload() {

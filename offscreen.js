@@ -5,6 +5,10 @@ let peer = null;
 let mediaStream = null;
 let currentCall = null;
 let dataConnection = null;
+// Peer id of the viewer that currently owns this hosting session. Both the
+// data channel and the media call are fenced on it, so a superseded or
+// media-only peer can neither drive the tab nor keep watching it.
+let activeViewerPeerId = null;
 
 // Debug-gated console helpers — silent unless debugLogging is true.
 // chrome.storage is not available in the offscreen document, so this is a
@@ -121,6 +125,21 @@ function sendToViewer(message) {
   }
 }
 
+// Close the active media call without tearing down the session. The close
+// handler is fenced on `call === currentCall`, so currentCall is cleared here
+// first to keep that handler a no-op for a call we are deliberately dropping.
+function closeCurrentCall(reason) {
+  if (!currentCall) return;
+  const call = currentCall;
+  currentCall = null;
+  log('[BROWSERLINK:offscreen] Closing media call —', reason);
+  try {
+    call.close();
+  } catch (e) {
+    warn('[BROWSERLINK:offscreen] Failed to close media call:', e.message || e);
+  }
+}
+
 // --- PeerJS setup ---
 
 function setupPeer() {
@@ -133,6 +152,23 @@ function setupPeer() {
 
   peer.on('call', (call) => {
     log('[BROWSERLINK:offscreen] Incoming media call from viewer');
+
+    // Ownership check. The viewer opens its data channel before placing the
+    // media call, so once a session has an owner any call from a different
+    // peer is either a superseded viewer or a media-only caller — both would
+    // otherwise keep receiving the hosted tab's screencast, which can show
+    // login challenges and account pages.
+    if (activeViewerPeerId && call.peer && call.peer !== activeViewerPeerId) {
+      warn('[BROWSERLINK:offscreen] Rejecting media call from non-owning peer');
+      try {
+        call.close();
+      } catch (e) {
+        warn('[BROWSERLINK:offscreen] Failed to close rejected call:', e.message || e);
+      }
+      return;
+    }
+
+    closeCurrentCall('superseded by a new media call');
     currentCall = call;
     const track = mediaStream ? mediaStream.getVideoTracks()[0] : null;
     configureOutgoingTrack(track);
@@ -155,6 +191,10 @@ function setupPeer() {
     startFrameTicker();
 
     call.on('close', () => {
+      if (call !== currentCall) {
+        log('[BROWSERLINK:offscreen] Superseded media call closed; active stream unaffected');
+        return;
+      }
       log('[BROWSERLINK:offscreen] Media call closed');
       stopFrameTicker();
       currentCall = null;
@@ -176,12 +216,19 @@ function setupPeer() {
     // privileged control, not just a duplicate video feed.
     const previous = dataConnection;
     dataConnection = conn;
+    activeViewerPeerId = conn.peer || null;
     if (previous && previous !== conn) {
       log('[BROWSERLINK:offscreen] Superseding previous viewer connection');
       try {
         previous.close();
       } catch (e) {
         warn('[BROWSERLINK:offscreen] Failed to close superseded connection:', e.message || e);
+      }
+      // Drop the old viewer's video too. Closing its data channel alone would
+      // leave an established media call streaming the hosted tab.
+      if (currentCall && activeViewerPeerId && currentCall.peer !== activeViewerPeerId) {
+        closeCurrentCall('its viewer was superseded');
+        stopFrameTicker();
       }
     }
 

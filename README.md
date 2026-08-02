@@ -11,8 +11,8 @@ Every agent workflow eventually hits a step that requires a real human —
 and the usual options are bad: hand over your password, stuff a cookie
 file, or babysit the agent.
 
-BrowserLink does something smaller. The agent hosts one tab over WebRTC and
-hands you a link:
+BrowserLink does something smaller than a remote desktop. The agent hosts a
+tab over WebRTC and hands you a link:
 
 ```text
 http://your-machine:8787/browserlink-viewer.html#host=abc123-long-uuid
@@ -69,9 +69,29 @@ You are **not** sharing your screen. The agent can't see your other tabs,
 your desktop, or anything else on your machine. When you close the tab,
 you're out.
 
-Treat the link like a password: anyone who has it can view that tab. The
-host ID is a random 122-bit UUID, so it isn't guessable — but it is
-shareable, so only send it to the person helping you.
+### ⚠️ What the link actually grants
+
+Be precise about this before you share one.
+
+**On your machine:** nothing. The agent cannot see your desktop, your tabs,
+or your files, and no credentials change hands.
+
+**On the agent's machine:** more than the one hosted tab. The viewer ships
+with a tab switcher, and the host answers tab-list and tab-switch requests
+(`sendTabListToViewer` → `chrome.tabs.query({})`), so whoever holds the link
+can enumerate and switch to any other **normal** tab in that browser profile
+— including unrelated logged-in sessions. `chrome://` and extension pages
+are excluded, but that is the only limit.
+
+So the Viewer URL is a bearer capability over the agent browser's normal
+tabs, not a keyhole onto one of them. The host ID is a random 122-bit UUID,
+so it isn't guessable — but it is shareable. **Treat the link like a
+password, and only send it to someone you would trust with that whole
+browser profile.**
+
+If you want a genuine one-tab boundary, that is a change to the host's
+control surface (constraining the tab list and rejecting `switchTab`), not a
+documentation fix — see `docs/final-report.md`.
 
 Mobile and tablet work for viewing, but keyboard handling is rough — the
 on-screen keyboard doesn't reliably appear when you'd expect. Use a laptop

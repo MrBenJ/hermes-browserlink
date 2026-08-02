@@ -12,6 +12,10 @@ const DEFAULT_HOST_STATE = {
   peerId: null,
   capturedTabId: null,
   debuggerAttached: false,
+  // The tab the debugger is actually attached to. capturedTabId is the tab we
+  // intend to host and is mutated early during startup, so teardown must not
+  // rely on it — otherwise a failed start can detach the wrong target.
+  debuggerAttachedTabId: null,
   viewerConnected: false,
   captureMode: null, // 'screencast' when hosting
   screencastWidth: null,
@@ -40,6 +44,7 @@ let reattachInProgress = false;
 let debuggerRecoverTimer = null;
 let hostExpiryTimer = null;
 let hostStopInProgress = false;
+let hostStartInProgress = false;
 let debuggerSuspendedUntil = 0;
 let debuggerSuspendReason = null;
 let hostStateLoaded = false;
@@ -668,6 +673,20 @@ async function resetTabZoom(tabId) {
 // --- Host lifecycle: CDP screencast mode ---
 
 async function handleStartHostingCDP(tabId) {
+  // Serialize starts. hostState.hosting stays false until waitForPeerId()
+  // resolves, so without this guard a second start arriving mid-handshake
+  // (both the bridge and the popup can send startHostingCDP) would overwrite
+  // capturedTabId while the first tab is already attached — and the first
+  // request's cleanup would then tear down the wrong tab, leaving a
+  // privileged debugger attachment behind.
+  if (hostStartInProgress) {
+    return { error: 'A host start is already in progress' };
+  }
+  if (hostStopInProgress) {
+    return { error: 'A host stop is in progress' };
+  }
+
+  hostStartInProgress = true;
   try {
     if (!tabId) {
       const tab = await findCapturableTab();
@@ -695,6 +714,8 @@ async function handleStartHostingCDP(tabId) {
     error('[BROWSERLINK:bg] startHostingCDP error:', err);
     logDiagnostic('start_cdp_error', { error: err.message || String(err), tabId: tabId || null });
     return { error: err.message };
+  } finally {
+    hostStartInProgress = false;
   }
 }
 
@@ -792,10 +813,11 @@ async function startScreencastModeAfterAttach(tabId) {
 }
 
 async function stopScreencast() {
-  if (hostState.capturedTabId && hostState.debuggerAttached) {
+  const tabId = hostState.debuggerAttachedTabId || hostState.capturedTabId;
+  if (tabId && hostState.debuggerAttached) {
     try {
       await chrome.debugger.sendCommand(
-        { tabId: hostState.capturedTabId }, 'Page.stopScreencast'
+        { tabId }, 'Page.stopScreencast'
       );
     } catch (e) { /* may already be stopped */ }
   }
@@ -833,7 +855,9 @@ async function handleStopHosting(reason = 'manual') {
       await chrome.runtime.sendMessage({ action: 'offscreen:stopHost', reason });
     } catch (e) { /* offscreen may already be gone */ }
 
-    await detachDebugger(hostState.capturedTabId);
+    // Detach the tab actually attached, which can differ from capturedTabId
+    // if startup failed partway through.
+    await detachDebugger(hostState.debuggerAttachedTabId || hostState.capturedTabId);
 
     try {
       await chrome.offscreen.closeDocument();
@@ -1549,7 +1573,7 @@ async function switchTabUnlocked(tabId, options = {}) {
 
   // Stop screencast on old tab
   await stopScreencast();
-  await detachDebugger(hostState.capturedTabId);
+  await detachDebugger(hostState.debuggerAttachedTabId || hostState.capturedTabId);
   resetPageAgentState();
 
   // Activate and capture new tab
@@ -1640,6 +1664,7 @@ async function attachDebugger(tabId) {
 
     await chrome.debugger.attach({ tabId }, '1.3');
     hostState.debuggerAttached = true;
+    hostState.debuggerAttachedTabId = tabId;
     debuggerSuspendedUntil = 0;
     debuggerSuspendReason = null;
     clearDebuggerRecoveryTimer();
@@ -1672,6 +1697,7 @@ async function detachDebugger(tabId) {
     logDiagnostic('debugger_detach', { tabId });
   } catch (e) { /* may already be detached */ }
   hostState.debuggerAttached = false;
+  hostState.debuggerAttachedTabId = null;
   await persistHostState();
 }
 
@@ -1683,6 +1709,7 @@ chrome.debugger.onDetach.addListener((source, reason) => {
     reason
   });
   hostState.debuggerAttached = false;
+  hostState.debuggerAttachedTabId = null;
   persistHostState().catch(() => {});
 
   if (hostState.hosting && hostState.viewerConnected) {

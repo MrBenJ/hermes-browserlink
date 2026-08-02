@@ -12,7 +12,13 @@ const repoRoot = join(__dirname, '..');
 // handshake "times out" immediately and we exercise the failure path.
 const PEER_TIMEOUT_MS = 15000;
 
-function loadBackground({ peerReady = false } = {}) {
+function loadBackground({ peerReady = false, hangHandshake = false } = {}) {
+  // When hangHandshake is set the 15s rejection timer is captured instead of
+  // fired, so a start can be parked mid-flight (debugger attached, screencast
+  // running, peer not yet ready) while the test issues a second start.
+  let peerTimeoutFn = null;
+  let armedResolve;
+  const handshakeArmed = new Promise((resolve) => { armedResolve = resolve; });
   const debuggerCommands = [];
   const sentRuntimeMessages = [];
   const detaches = [];
@@ -109,12 +115,19 @@ function loadBackground({ peerReady = false } = {}) {
     self: null,
     __BROWSERLINK_ENABLE_TEST_HOOKS__: true,
     setTimeout: (fn, delay, ...args) => {
-      // Only fast-forward the handshake timer in the failure scenario.
-      // waitForPeerId() arms this timer before registering its listener, so
-      // firing it eagerly would beat the simulated peerReady in the happy path.
-      if (delay === PEER_TIMEOUT_MS && !peerReady) {
-        queueMicrotask(() => fn(...args));
-        return 0;
+      if (delay === PEER_TIMEOUT_MS) {
+        if (hangHandshake) {
+          peerTimeoutFn = () => fn(...args);
+          armedResolve();
+          return 0;
+        }
+        // Only fast-forward the handshake timer in the failure scenario.
+        // waitForPeerId() arms this timer before registering its listener, so
+        // firing it eagerly would beat the simulated peerReady in the happy path.
+        if (!peerReady) {
+          queueMicrotask(() => fn(...args));
+          return 0;
+        }
       }
       return setTimeout(fn, delay, ...args);
     }
@@ -137,6 +150,8 @@ function loadBackground({ peerReady = false } = {}) {
     sentRuntimeMessages,
     detaches,
     sessionSets,
+    handshakeArmed,
+    firePeerTimeout: () => peerTimeoutFn?.(),
     offscreen: {
       get closed() { return offscreenClosed; },
       get created() { return offscreenCreated; }
@@ -202,6 +217,40 @@ describe('background start-failure cleanup', () => {
     expect(state.debuggerAttached).toBe(false);
     expect(state.peerId).toBeNull();
     expect(state.captureMode).toBeNull();
+  });
+
+  it('rejects a second start while the first is still in flight', async () => {
+    const { context, handshakeArmed, firePeerTimeout } = loadBackground({ hangHandshake: true });
+    await context.__browserlinkBackgroundTestHooks.ensureHostStateLoadedForTest();
+
+    const first = context.handleStartHostingCDP(42);
+    await handshakeArmed;
+
+    const second = await context.handleStartHostingCDP(99);
+
+    expect(second.error).toMatch(/in progress/i);
+
+    // Let the parked first start finish so the test does not leave it pending.
+    firePeerTimeout();
+    await first.catch(() => {});
+  });
+
+  it('detaches the tab it actually attached, not a tab from a later start', async () => {
+    const { context, handshakeArmed, firePeerTimeout, detaches } =
+      loadBackground({ hangHandshake: true });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+
+    const first = context.handleStartHostingCDP(42);
+    await handshakeArmed;
+    await context.handleStartHostingCDP(99);
+
+    firePeerTimeout();
+    await first.catch(() => {});
+
+    expect(detaches).toContainEqual({ tabId: 42 });
+    expect(detaches).not.toContainEqual({ tabId: 99 });
+    expect(hooks.getHostStateForTest().capturedTabId).toBeNull();
   });
 
   it('still starts hosting normally when the peer handshake succeeds', async () => {

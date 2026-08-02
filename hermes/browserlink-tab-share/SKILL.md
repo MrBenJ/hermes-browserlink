@@ -53,6 +53,13 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
   The base must be a LAN IP, Tailscale hostname/IP, or a static-host URL
   reachable from the human's device. Only exception: the human explicitly
   says they are opening the viewer on this same machine.
+- **A Viewer URL grants more than the hosted tab.** The viewer has a tab
+  switcher, and the host answers tab-list and tab-switch requests, so anyone
+  holding the link can enumerate and switch to any other **normal** tab in
+  this browser profile (`chrome://` and extension pages excluded). When you
+  hand over a link, say so plainly — do not describe it as access to one
+  tab. If the profile holds sensitive unrelated sessions, warn the human
+  before sharing.
 - Verify bridge state before claiming success. Return concrete evidence,
   not assumptions. A visible popup is not proof that hosting started.
 - Prefer the bridge path, not the popup click path.

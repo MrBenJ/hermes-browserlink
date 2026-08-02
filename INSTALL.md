@@ -11,9 +11,18 @@ Do the work, do not just describe it. Verify with evidence, do not assume.
 ## 1. What you are installing
 
 BrowserLink is an **unpacked MV3 Chrome extension** that lets the browser
-you control host a single tab over WebRTC, so a human can open a link,
-complete one blocked step (login, 2FA, CAPTCHA), and leave — without ever
-handing you their credentials.
+you control host a tab over WebRTC, so a human can open a link, complete one
+blocked step (login, 2FA, CAPTCHA), and leave — without ever handing you
+their credentials.
+
+> **⚠️ Scope of the share.** The viewer is not limited to the hosted tab. It
+> ships with a tab switcher, and the host answers tab-list and tab-switch
+> requests, so whoever holds a Viewer URL can enumerate and switch to any
+> other **normal** tab in this browser profile (`chrome://` and extension
+> pages are excluded). Treat a Viewer URL as a bearer capability over this
+> browser profile's normal tabs. Tell the human that before they share one,
+> and prefer a browser profile that holds only the accounts relevant to the
+> task.
 
 After install you will have a bridge page at
 `chrome-extension://<extension-id>/bridge.html` with a step-by-step UI for

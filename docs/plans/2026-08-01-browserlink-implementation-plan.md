@@ -221,10 +221,24 @@ remains; no `lobsterl.ink` reference remains outside spike docs.
 - Modify: `lib/bridge-utils.js`
 - Test: `test/bridge-utils.test.js`
 
-**Step 1 — replace `test/bridge-utils.test.js` `buildViewerUrl` tests with:**
+**Step 1 — update `test/bridge-utils.test.js`.** The file already opens
+with ESM imports — do NOT introduce `require` (mixing `require` into this
+file will duplicate bindings / break under Vitest ESM). Change the
+existing import on line 2 from:
 ```js
-const { buildViewerUrl, normalizeViewerBaseUrl } = require('../lib/bridge-utils.js');
+import { buildViewerUrl, pickDefaultSelectedTab } from '../lib/bridge-utils.js';
+```
+to:
+```js
+import { buildViewerUrl, normalizeViewerBaseUrl, pickDefaultSelectedTab } from '../lib/bridge-utils.js';
+```
+(The rewritten `lib/bridge-utils.js` keeps a statically-analyzable
+`module.exports = { ... }` with explicit key:value pairs, so Vitest's
+CJS→ESM interop resolves named imports exactly as it does today.)
 
+Then replace ONLY the `buildViewerUrl` describe block with these two
+describe blocks (leave the `pickDefaultSelectedTab` describe untouched):
+```js
 describe('normalizeViewerBaseUrl', () => {
   it('trims whitespace', () => {
     expect(normalizeViewerBaseUrl('  http://x/v.html ')).toBe('http://x/v.html');
@@ -262,7 +276,6 @@ describe('buildViewerUrl', () => {
   });
 });
 ```
-Keep the existing `pickDefaultSelectedTab` tests unchanged.
 
 **Step 2 — run:** `npx vitest run test/bridge-utils.test.js` — **Expected:
 FAIL** (new functions missing).
@@ -395,14 +408,34 @@ document.getElementById('viewerBaseUrl').addEventListener('change', (e) => {
 - Create: `scripts/build-viewer.js`
 - Test: `test/build-viewer.test.js`
 
+**Step 0 — fix the viewer entry's landing-site redirects (source patch).**
+`client/viewer/index.html` has an inline bootstrap script with two
+absolute-path behaviors that assume the lobsterl.ink site layout and break
+a portable single file:
+
+1. `location.replace('/viewer/#' + params.toString())` (query→hash
+   redirect) — navigates to a `/viewer/` path that won't exist when the
+   file is served as e.g. `/browserlink-viewer.html`. Change to:
+   `location.replace(location.pathname + '#' + params.toString());`
+   (Identical behavior on a hosted `/viewer/` deploy; correct everywhere
+   else.)
+2. `window.location = '/';` (no `host` param → bounce to site root) —
+   makes the viewer's own manual-entry overlay unreachable in portable
+   deployments. `client/viewer.js` already shows the `connect-overlay`
+   with the peer-ID input when no host param is present (verified against
+   upstream: overlay is visible by default and `startConnect` is wired to
+   `overlay-connect`). Change to: `return;`
+
 **Step 1 — write `test/build-viewer.test.js`:**
 ```js
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.join(__dirname, '..');
+// ESM-correct: __dirname does not exist in Vitest/Node ESM test files.
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist', 'browserlink-viewer.html');
 
 describe('build-viewer', () => {
@@ -424,6 +457,12 @@ describe('build-viewer', () => {
 
   it('inlines substantial JS (peerjs is large)', () => {
     expect(fs.readFileSync(OUT, 'utf8').length).toBeGreaterThan(100000);
+  });
+
+  it('is the viewer entry, not the landing page', () => {
+    const html = fs.readFileSync(OUT, 'utf8');
+    expect(html).toContain('id="remote-video"');
+    expect(html).toContain('id="overlay-peer-input"');
   });
 
   it('contains no lobsterl.ink or other hardcoded viewer domain', () => {
@@ -449,7 +488,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const ENTRY = path.join(ROOT, 'client', 'index.html');
+// The viewer entrypoint — NOT client/index.html, which is the landing page.
+const ENTRY = path.join(ROOT, 'client', 'viewer', 'index.html');
 const OUT_DIR = path.join(ROOT, 'dist');
 const OUT_FILE = path.join(OUT_DIR, 'browserlink-viewer.html');
 
@@ -494,17 +534,19 @@ function main() {
 main();
 ```
 
-**Step 4 — run:** `node scripts/build-viewer.js && npx vitest run test/build-viewer.test.js` — **Expected: PASS.** If `client/index.html`
-has no external stylesheets, the stylesheet test still passes (vacuously) —
-fine.
+**Step 4 — run:** `node scripts/build-viewer.js && npx vitest run test/build-viewer.test.js` — **Expected: PASS.** If the viewer entry
+has no external stylesheets, the stylesheet test still passes (vacuously)
+— fine.
 
 **Step 5 — commit:** `feat: single-file exportable viewer build`
 
-**Note:** if `client/index.html` references `viewer/index.html` via a
-redirect or anchor, the single file must BE the viewer entry — read
-`client/README.md` and the two HTML files; if the real entry is
-`client/viewer/index.html`, build from THAT file instead and note the
-choice in the commit message. The test suite above is entry-agnostic.
+**Entry decision (resolved):** the build input is `client/viewer/index.html`
+— the actual viewer, with `#remote-video`, `#overlay-peer-input`, and the
+`../lib/peerjs.min.js` + `../lib/viewer-utils.js` + `../viewer.js` script
+refs. `client/index.html` is the marketing/landing page and is NOT part of
+the portable artifact; keep it in the repo as optional hosted-site
+content. The `is the viewer entry` test above guards against regressing
+this choice.
 
 ### Task 13: Serve script + docs
 
@@ -538,6 +580,9 @@ exec python3 -m http.server "$PORT" --directory "$DIR"
 1. Build viewer, serve on 8787.
 2. On the bridge, set Viewer Base URL to
    `http://127.0.0.1:8787/browserlink-viewer.html`, verify it persists.
+   (Loopback is correct HERE because this smoke is same-machine — the
+   no-loopback rule applies only to links handed to a human on another
+   device.)
 3. Repeat the Task 5 smoke using the Viewer URL field's output.
 4. **Expected:** identical behavior to the upstream-client smoke.
 5. Update `docs/spikes/05-e2e.md` with a "ported re-run" section.
@@ -570,7 +615,10 @@ checklist and evidence-list style, they're excellent):**
    `bash scripts/serve-viewer.sh`; set the bridge's Viewer Base URL to
    `http://<tailscale-hostname-or-LAN-IP>:8787/browserlink-viewer.html`;
    exporting `dist/browserlink-viewer.html` to any static host for
-   off-LAN sharing; note the file works from any static server.
+   off-LAN sharing; note the file works from any static server. Explicit
+   rule: loopback base URLs (`127.0.0.1`/`localhost`) are for same-machine
+   smoke tests only — any link returned to a human must use an address
+   reachable from THEIR device.
 7. **CLI alternative** — `/browser connect` with a dedicated
    `--user-data-dir` + the same extension flags, with a **bold** warning
    that `/browser connect` does not work from gateway chats (Telegram etc).
@@ -629,6 +677,11 @@ description: Use when a human wants to share a logged-in tab from the Hermes-con
 - The Viewer URL field is only valid when a Viewer Base URL is configured
   on the bridge. If it shows the set-base-URL hint, configure it (serve
   flow below) before proceeding.
+- NEVER return a Viewer URL whose base is `127.0.0.1` or `localhost` to a
+  human on another device — it resolves on THEIR machine and is dead. The
+  base must be a LAN IP, Tailscale hostname/IP, or a static-host URL
+  reachable from the human's device. Only exception: the human explicitly
+  says they're opening the viewer on this same machine.
 
 ## Quick Flow
 1. Confirm the extension is loaded (CDP /json/list shows the extension
@@ -641,10 +694,16 @@ description: Use when a human wants to share a logged-in tab from the Hermes-con
    BRIDGE_URL if Start Host backgrounded it — state persists.
 5. Ensure the viewer is being served: `curl -sf http://127.0.0.1:8787/browserlink-viewer.html`
    — if down, run `bash <repo>/scripts/serve-viewer.sh` in the background
-   first (build first if `dist/` is missing).
-6. Verify: bridge says Hosting, peer ID populated, captured tab matches,
+   first (build first if `dist/` is missing). This curl only proves LOCAL
+   serving — it says nothing about whether the human can reach the link.
+6. Check the bridge's configured Viewer Base URL before reading the Viewer
+   URL field: if it is loopback (`127.0.0.1`/`localhost`) and the human is
+   on another device, STOP — reconfigure it to this machine's LAN IP or
+   Tailscale address (`tailscale ip -4`, or the MagicDNS name), then
+   re-read the Viewer URL field.
+7. Verify: bridge says Hosting, peer ID populated, captured tab matches,
    focus indicator `Active`.
-7. Return the Viewer URL to the human.
+8. Return the Viewer URL to the human.
 
 ## To stop sharing
 Click Stop Host on the bridge; verify hosting is false. Leave the viewer

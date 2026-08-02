@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   buildViewerTabList,
   getCaptureSize,
+  normalizeViewportDimension,
+  VIEWPORT_MIN_DIMENSION,
+  VIEWPORT_MAX_DIMENSION,
   createSwitchSerializer,
   getOpenerAutoFollowDecision,
   getViewerTabListQueryInfo
@@ -190,5 +193,37 @@ describe('opener auto-follow helpers', () => {
       { tabId: 42, openerTabId: 7, attempts: 5, createdAt: 1_000 },
       { maxAttempts: 5, maxPendingAgeMs: 30_000, now: 31_001 }
     )).toEqual({ action: 'cancel', reason: 'max-age-exceeded' });
+  });
+});
+
+describe('normalizeViewportDimension', () => {
+  it('passes through a sane integer', () => {
+    expect(normalizeViewportDimension(1280)).toBe(1280);
+  });
+
+  it('rounds fractional values', () => {
+    expect(normalizeViewportDimension(1280.6)).toBe(1281);
+  });
+
+  it('accepts numeric strings from the wire', () => {
+    expect(normalizeViewportDimension('1024')).toBe(1024);
+  });
+
+  it('rejects non-finite values', () => {
+    expect(normalizeViewportDimension(NaN)).toBeNull();
+    expect(normalizeViewportDimension(Infinity)).toBeNull();
+    expect(normalizeViewportDimension(undefined)).toBeNull();
+    expect(normalizeViewportDimension(null)).toBeNull();
+    expect(normalizeViewportDimension('wide')).toBeNull();
+    expect(normalizeViewportDimension({})).toBeNull();
+  });
+
+  it('clamps values below the minimum', () => {
+    expect(normalizeViewportDimension(0)).toBe(VIEWPORT_MIN_DIMENSION);
+    expect(normalizeViewportDimension(-4000)).toBe(VIEWPORT_MIN_DIMENSION);
+  });
+
+  it('clamps values above the maximum', () => {
+    expect(normalizeViewportDimension(10_000_000)).toBe(VIEWPORT_MAX_DIMENSION);
   });
 });

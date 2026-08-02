@@ -1474,8 +1474,17 @@ async function handleControlEvent(evt) {
   }
 }
 
-async function setHostViewport(width, height) {
+async function setHostViewport(rawWidth, rawHeight) {
   if (!hostState.capturedTabId || !hostState.debuggerAttached) return;
+
+  // Viewer-supplied, so never trust it: clamp to something Chrome can honour
+  // before it reaches chrome.windows.update or setDeviceMetricsOverride.
+  const width = normalizeViewportDimension(rawWidth);
+  const height = normalizeViewportDimension(rawHeight);
+  if (width === null || height === null) {
+    warn('[BROWSERLINK:bg] Ignoring setViewport with invalid dimensions:', rawWidth, 'x', rawHeight);
+    return;
+  }
 
   const tabId = hostState.capturedTabId;
   log('[BROWSERLINK:bg] Setting host viewport to', width, 'x', height);
@@ -1630,6 +1639,25 @@ async function createNewTab(url) {
 
 async function closeTab(tabId) {
   if (!tabId) return;
+
+  // The viewer UI only offers tabs from buildViewerTabList, but the data
+  // channel is an untrusted bearer-link surface — a link holder can send any
+  // tabId. Re-apply the same normal-tab policy here, or closing bypasses the
+  // boundary that listing and switching enforce (including closing the
+  // BrowserLink bridge itself).
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch (e) {
+    warn('[BROWSERLINK:bg] closeTab: tab not found', tabId);
+    return;
+  }
+  if (isForbiddenTab(tab)) {
+    warn('[BROWSERLINK:bg] closeTab blocked: forbidden URL', tab.url);
+    logDiagnostic('close_tab_blocked', { tabId, url: tab.url || '' });
+    return;
+  }
+
   const wasCaptured = tabId === hostState.capturedTabId;
   await chrome.tabs.remove(tabId);
 
@@ -2245,7 +2273,9 @@ if (self.__BROWSERLINK_ENABLE_TEST_HOOKS__) {
     },
     ensureHostStateLoadedForTest: ensureHostStateLoaded,
     onTabUpdatedForTest: onTabUpdated,
-    reconcileCapturedTabScreencastGeometryForTest: reconcileCapturedTabScreencastGeometry
+    reconcileCapturedTabScreencastGeometryForTest: reconcileCapturedTabScreencastGeometry,
+    closeTabForTest: closeTab,
+    setHostViewportForTest: setHostViewport
   };
 }
 

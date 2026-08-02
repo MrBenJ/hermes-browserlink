@@ -1,8 +1,8 @@
 # Hermes BrowserLink — Port Plan (Discussion Draft)
 
-> Status: DRAFT for discussion with Ben. Once the open decisions below are
-> locked, this gets expanded into a granular implementer plan (bite-sized
-> tasks, exact files, TDD steps) for the coding model.
+> Status: Decisions locked (§4). Next step: expand into the granular
+> implementer plan (bite-sized tasks, exact files, TDD steps) for the
+> coding model — Claude Opus 5 via Claude Code, Cadence reviewing.
 
 **Goal:** Port LobsterLink (Chrome extension that hosts an agent's browser tab
 over WebRTC so a human can complete blocked steps like logins/CAPTCHAs) into
@@ -115,64 +115,80 @@ Each spike produces evidence (command output), not assumptions.
 7. Rebrand: `manifest.json` (name `BrowserLink`, description, reset version
    to `1.0.0`), log prefixes `[LOBSTERLINK:*]` → `[BROWSERLINK:*]`,
    UI text in `bridge.html`/`popup.html`/`client/index.html`.
-8. Repoint viewer URL constant in `lib/bridge-utils.js` + text in
-   `bridge.html` + tests (depends on Decision D1).
+8. Remove the hardcoded viewer URL from `lib/bridge-utils.js` + text in
+   `bridge.html` (replaced by configurable base URL in Phase 2) + tests.
 9. Update `test/bridge-utils.test.js` expectations; run `vitest run` — all
    green before proceeding.
 
-### Phase 2 — Viewer hosting (Decision D1)
-10. If self-hosting: wire `client/` to GitHub Pages on
-    `mrbenj/hermes-browserlink` (static, no build; `client/README.md`
-    already documents this shape). Update viewer URL constant to the Pages
-    URL. Verify the deployed viewer loads and connects.
+### Phase 2 — Exportable viewer client (DECIDED, see §4)
+10. Refactor the viewer into a **portable artifact**: keep `client/` as the
+    source, add `scripts/build-viewer.js` producing a single self-contained
+    `dist/browserlink-viewer.html` (inlines `lib/peerjs.min.js`,
+    `lib/viewer-utils.js`, `client/viewer.js`, styles). No framework, no
+    build chain beyond one node script.
+11. Make the viewer base URL **configurable**: bridge page gets a
+    "Viewer base URL" field persisted via `chrome.storage`;
+    `lib/bridge-utils.js buildViewerUrl()` reads config, falls back to a
+    placeholder that prompts configuration. **No hardcoded domain anywhere
+    in the shipped product.**
+12. Default serve flow for Hermes: `scripts/serve-viewer.sh` (or documented
+    `python3 -m http.server`) serves the viewer on a local port; agent
+    constructs the link using the machine's LAN/Tailscale address. Document
+    exporting the single file to any static host for sharing outside the
+    LAN/Tailnet.
 
 ### Phase 3 — Hermes install flow (replaces AGENT-INSTALL.md)
-11. Write `INSTALL.md` for Hermes agents: suspicious-code review checklist
+13. Write `INSTALL.md` for Hermes agents: suspicious-code review checklist
     (keep upstream's, it's good), durable path
     `~/.hermes/browser-extensions/browserlink`, `AGENT_BROWSER_ARGS` setup
     via `~/.hermes/.env` (note: env, not config.yaml), live-flag
     verification, extension-ID discovery via CDP `/json/list`, bridge URL
-    construction, required final-answer evidence list (port upstream's —
-    it's excellent).
-12. Document the CDP-connect alternative for CLI use (`/browser connect`
+    construction, viewer-serve flow (Phase 2 task 12), required
+    final-answer evidence list (port upstream's — it's excellent).
+14. Document the CDP-connect alternative for CLI use (`/browser connect`
     + dedicated `--user-data-dir` + extension flags), with the
     gateway-vs-CLI caveat in bold.
 
 ### Phase 4 — Hermes skill (replaces openclaw/ skill)
-13. Author `hermes/browserlink-tab-share/SKILL.md` (Hermes skill format):
+15. Author `hermes/browserlink-tab-share/SKILL.md` (Hermes skill format):
     triggers ("share the X tab", "give me the viewer link", "stop sharing"),
     Hermes tool flow (`browser_navigate` to bridge URL or CDP fallback),
-    hosted-tab-active hard rule, bridge-fields-are-truth rule, verification
-    checklist, stop-sharing flow. Include `INSTALLED`/`BRIDGE_URL`
-    self-patching convention from upstream (it's a good pattern).
-14. Install skill into `~/.hermes/skills/` and verify Cadence can execute
+    hosted-tab-active hard rule, bridge-fields-are-truth rule, viewer-serve
+    + link construction flow, verification checklist, stop-sharing flow.
+    Include `INSTALLED`/`BRIDGE_URL` self-patching convention from upstream
+    (it's a good pattern).
+16. Install skill into `~/.hermes/skills/` and verify Cadence can execute
     the full flow from a Telegram message end-to-end. (This is the real
     acceptance test.)
 
 ### Phase 5 — Docs + hygiene
-15. Rewrite `README.md` for the Hermes audience (keep upstream's excellent
-    problem framing, swap runtime references).
-16. `package.json`: rename, keep `vitest` + `serve` scripts.
-17. Decide fate of `scripts/` (dev-runtime, log-server, stamp-version,
+17. Rewrite `README.md` for the Hermes audience (keep upstream's excellent
+    problem framing, swap runtime references; document the exportable
+    viewer philosophy and the PeerJS-cloud signaling dependency).
+18. `package.json`: rename, keep `vitest` + `serve` scripts, add
+    `build:viewer`.
+19. Decide fate of `scripts/` (dev-runtime, log-server, stamp-version,
     watch-version) — keep what the dev loop needs, drop version-stamping if
     we reset to semver.
-18. Final: full `vitest run`, fresh-machine install rehearsal following
+20. Final: full `vitest run`, fresh-machine install rehearsal following
     `INSTALL.md` exactly as written, from a clean Hermes session.
 
-## 4. Open decisions for Ben
+## 4. Decisions (LOCKED 2026-08-01)
 
-- **D1 — Viewer hosting:** self-host `client/` via GitHub Pages on
-  `mrbenj/hermes-browserlink` (RECOMMENDED — you own it, upstream domain
-  can't break/change under you) vs keep pointing at `lobsterl.ink`
-  (zero effort, but hard dependency on davidguttman's domain).
-- **D2 — Topology:** agent-browser local mode (RECOMMENDED — works from
-  Telegram) as primary, `/browser connect` as documented alternative.
-  Contingent on Spike 1–3 results; if agent-browser can't load extensions,
-  we revisit.
-- **D3 — Branding:** "BrowserLink" (matches repo) OK? Any icon ambitions or
-  ship plain?
-- **D4 — PeerJS broker:** keep default PeerJS cloud (RECOMMENDED for v1)
-  vs self-host a peer server (YAGNI unless reliability demands it).
+- **D1 — Viewer:** **exportable client, no tied domain.** Portable
+  single-file viewer build + configurable base URL on the bridge; default
+  Hermes flow serves it locally and links over LAN/Tailscale. Not GitHub
+  Pages, not lobsterl.ink. (Phase 2.)
+- **D2 — Topology:** agent-browser local mode (works from Telegram) as
+  primary, `/browser connect` as documented CLI alternative. Contingent on
+  Spike 1–3 results; if agent-browser can't load extensions, revisit.
+- **D3 — Branding:** **BrowserLink.** Confirmed.
+- **D4 — PeerJS broker:** **keep the default** (free PeerJS cloud,
+  `0.peerjs.com`, zero-config). Signaling only — media/input flows P2P over
+  WebRTC and never touches the broker. STUN-only by default (no TURN), so
+  hostile symmetric NATs can fail; document this + the self-host PeerServer
+  escape hatch in the README. Adding TURN/self-hosting is explicitly YAGNI
+  for v1.
 
 ## 5. Risks
 

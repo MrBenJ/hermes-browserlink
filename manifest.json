@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "LobsterLink",
-  "version": "4.29.16.58",
-  "description": "Remote browser tab viewing and control via WebRTC",
+  "name": "BrowserLink",
+  "version": "1.0.0",
+  "description": "Remote browser tab viewing and control via WebRTC — hand a human one blocked step without sharing credentials",
   "permissions": [
     "tabs",
     "debugger",
@@ -22,7 +22,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "LobsterLink"
+    "default_title": "BrowserLink"
   },
   "icons": {},
   "web_accessible_resources": []

@@ -94,7 +94,9 @@ private hosts.
 > address, so it stops the direct cases (`127.0.0.1`, `192.168.x`,
 > `169.254.169.254`, `router.local`) but **not** a public-looking domain
 > that resolves to a private address — `127.0.0.1.nip.io` and friends get
-> through. Treat it as defence in depth, not a guarantee. An extension
+> through. Nor does it stop a public URL from *redirecting* to a private one:
+> that is caught after the fact, when the tab lands, and hosting stops — but
+> the request has already been issued by then. Treat it as defence in depth, not a guarantee. An extension
 > cannot resolve DNS before navigating; a real boundary needs an explicit
 > operator allowlist of reachable origins or a network-layer block. See
 > `docs/final-report.md`.

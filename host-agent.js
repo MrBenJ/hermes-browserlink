@@ -395,7 +395,14 @@
       badge.textContent = '';
       return;
     }
-    badge.textContent = 'BrowserLink host: ' + peerId;
+    // Never render the peer id here. This badge lives in the hosted page's own
+    // DOM, so the page's JavaScript — and any analytics or session-replay
+    // script running on it — can read it. The peer id is the whole session
+    // capability: anyone holding it can open a data connection and, because
+    // ownership is last-connection-wins, supersede the legitimate viewer and
+    // take the full input/navigation control surface. The operator can already
+    // read the id on the bridge page and in the popup.
+    badge.textContent = 'BrowserLink host active';
     badge.style.display = 'block';
   }
 

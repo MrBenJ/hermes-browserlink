@@ -10,6 +10,15 @@ let dataConnection = null;
 // media-only peer can neither drive the tab nor keep watching it.
 let activeViewerPeerId = null;
 
+// STUN-only, no TURN. PeerJS' bundled defaultConfig ships two
+// PeerJS-operated TURN relays with embedded credentials, so a connection that
+// cannot go direct would relay the hosted tab's media through third-party
+// infrastructure. The port plan locked STUN-only (decision D4) and the README
+// documents signaling-only third-party exposure, so the config is set
+// explicitly rather than inherited.
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+
 // Debug-gated console helpers — silent unless debugLogging is true.
 // chrome.storage is not available in the offscreen document, so this is a
 // simple local default; flip to true here when debugging.
@@ -143,7 +152,7 @@ function closeCurrentCall(reason) {
 // --- PeerJS setup ---
 
 function setupPeer() {
-  peer = new Peer();
+  peer = new Peer({ config: { iceServers: ICE_SERVERS } });
 
   peer.on('open', (id) => {
     log('[BROWSERLINK:offscreen] Peer ready, id:', id);
@@ -472,6 +481,9 @@ function stopHost(reason = 'manual') {
   stopFrameTicker();
   log('[BROWSERLINK:offscreen] Stopping host');
   notifyViewerHostStopped(reason);
+  // Clear ownership with the session. Leaving a stale peer id here carries the
+  // previous viewer's identity into the next host session's media fence.
+  activeViewerPeerId = null;
   if (dataConnection) {
     dataConnection.close();
     dataConnection = null;

@@ -147,7 +147,11 @@ Worth knowing before you deploy this:
   session description and ICE candidates. **Media and input never touch
   it**; those go peer-to-peer over encrypted WebRTC. The broker does see
   that two peers connected, and when.
-- **STUN only, no TURN.** There is no relay fallback. On restrictive NATs
+- **STUN only, no TURN — set explicitly.** PeerJS' bundled defaults include
+  two PeerJS-operated TURN relays with embedded credentials, which would
+  relay the hosted tab's media through third-party infrastructure when a
+  direct path fails. Both ends override `iceServers` to a single STUN
+  server, so there is no relay fallback. On restrictive NATs
   (symmetric NAT, some corporate or mobile networks) the peer connection
   will simply fail to establish rather than degrade.
 - **Escape hatch:** run your own [PeerServer](https://github.com/peers/peerjs-server)

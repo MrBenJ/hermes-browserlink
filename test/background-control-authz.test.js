@@ -364,3 +364,27 @@ describe('captured tab navigating to a forbidden URL', () => {
     expect(hooks.getHostStateForTest().hosting).toBe(true);
   });
 });
+
+describe('focusTab authorization', () => {
+  async function withHost() {
+    const loaded = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = loaded.context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({ hosting: true, capturedTabId: NORMAL, debuggerAttached: true });
+    return { ...loaded, hooks };
+  }
+
+  it('refuses to focus an extension or chrome tab', async () => {
+    const { hooks, windowUpdates } = await withHost();
+    await hooks.handleControlEventForTest({ type: 'focusTab', tabId: EXTENSION_TAB });
+    await hooks.handleControlEventForTest({ type: 'focusTab', tabId: CHROME_TAB });
+    expect(windowUpdates).toEqual([]);
+  });
+
+  it('still focuses the captured tab', async () => {
+    const { hooks } = await withHost();
+    await expect(
+      hooks.handleControlEventForTest({ type: 'focusTab', tabId: NORMAL })
+    ).resolves.toBeUndefined();
+  });
+});

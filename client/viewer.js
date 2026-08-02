@@ -1,3 +1,7 @@
+// STUN-only, no TURN — see offscreen.js. PeerJS' bundled defaults include
+// PeerJS-operated TURN relays; both ends must agree or media can still relay.
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
 // BrowserLink Viewer - connects to host, renders video, captures and sends input
 
 const video = document.getElementById('remote-video');
@@ -120,7 +124,7 @@ function connect(hostPeerId) {
     : '';
   setStatus(reconnectAttempts > 0 ? 'Reconnecting...' : 'Connecting...', reconnectAttempts > 0 ? 'reconnecting' : 'connecting');
 
-  peer = new Peer();
+  peer = new Peer({ config: { iceServers: ICE_SERVERS } });
 
   peer.on('open', () => {
     dataConn = peer.connect(hostPeerId, { reliable: true });

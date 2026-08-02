@@ -442,3 +442,22 @@ describe('offscreen rejects malformed viewer messages', () => {
     expect(messages.filter((m) => m.action === 'controlEvent')).toHaveLength(1);
   });
 });
+
+describe('stopHost clears ownership', () => {
+  it('does not carry a stale viewer id into the next session', () => {
+    const { peerHandlers, runtimeListener } = loadOffscreen();
+    const first = makeConn('first');
+    peerHandlers.connection(first);
+
+    // Host stops; the previous viewer's id must not survive it.
+    runtimeListener({ action: 'offscreen:stopHost', reason: 'manual' }, {}, () => {});
+
+    // A call from the OLD viewer must now be refused, since no one owns the
+    // new session yet.
+    const stale = makeCall(first.peer);
+    peerHandlers.call(stale);
+
+    expect(stale.answered).toBe(false);
+    expect(stale.closed).toBe(true);
+  });
+});

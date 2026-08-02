@@ -1502,9 +1502,28 @@ async function handleControlEvent(evt) {
         await switchTab(evt.tabId);
         break;
 
-      case 'focusTab':
-        await activateTabWindow(evt.tabId || hostState.capturedTabId);
+      case 'focusTab': {
+        // Viewer-supplied tabId, same untrusted surface as closeTab/switchTab.
+        // Unvalidated, a link holder could yank the operator's foreground
+        // window to any chrome://, extension or file:// tab in the profile.
+        const focusTarget = evt.tabId || hostState.capturedTabId;
+        if (evt.tabId && evt.tabId !== hostState.capturedTabId) {
+          let focusTab;
+          try {
+            focusTab = await chrome.tabs.get(evt.tabId);
+          } catch (e) {
+            warn('[BROWSERLINK:bg] focusTab: tab not found', evt.tabId);
+            break;
+          }
+          if (isForbiddenTab(focusTab)) {
+            warn('[BROWSERLINK:bg] focusTab blocked: forbidden URL', focusTab.url);
+            logDiagnostic('focus_tab_blocked', { tabId: evt.tabId, url: focusTab.url || '' });
+            break;
+          }
+        }
+        await activateTabWindow(focusTarget);
         break;
+      }
 
       case 'newTab':
         await createNewTab(evt.url);

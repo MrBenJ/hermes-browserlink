@@ -215,6 +215,15 @@ viewer link"*, *"use my logged-in tab"*, *"stop sharing"*.
   a shareable link"* until a base URL is configured. That's not a bug — it
   is refusing to emit a dead link.
 
+### Vendored assets
+
+`lib/peerjs.min.js` and `client/lib/peerjs.min.js` are byte-identical
+copies of the PeerJS build vendored by upstream LobsterLink at
+`4bb37deb0e1292c8b53c3e702f7d97c6a241fcc3`; the same holds for the
+`viewer-utils.js` pair. The minified bundle carries no version string, so
+that upstream commit is the provenance to diff against — this port did not
+re-vendor or upgrade them.
+
 ### Development
 
 ```bash

@@ -393,3 +393,37 @@ describe('offscreen viewer ownership', () => {
     expect(messages.filter((m) => m.action === 'viewerConnected')).toEqual([]);
   });
 });
+
+describe('offscreen rejects malformed viewer messages', () => {
+  const bad = [
+    ['invalid JSON', 'not json at all'],
+    ['JSON null', 'null'],
+    ['a bare JSON string', '"hello"'],
+    ['a JSON number', '42'],
+    ['an object with no type', '{"x":1}'],
+    ['an object with a non-string type', '{"type":123}']
+  ];
+
+  for (const [label, payload] of bad) {
+    it(`ignores ${label} without throwing`, () => {
+      const { peerHandlers, messages } = loadOffscreen();
+      const conn = makeConn('only');
+      peerHandlers.connection(conn);
+      messages.length = 0;
+
+      expect(() => conn.fire('data', payload)).not.toThrow();
+      expect(messages.filter((m) => m.action === 'inputEvent' || m.action === 'controlEvent')).toEqual([]);
+    });
+  }
+
+  it('still forwards a well-formed control event', () => {
+    const { peerHandlers, messages } = loadOffscreen();
+    const conn = makeConn('only');
+    peerHandlers.connection(conn);
+    messages.length = 0;
+
+    conn.fire('data', JSON.stringify({ type: 'navigate', url: 'https://example.com' }));
+
+    expect(messages.filter((m) => m.action === 'controlEvent')).toHaveLength(1);
+  });
+});

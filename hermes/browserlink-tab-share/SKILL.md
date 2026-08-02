@@ -61,6 +61,9 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
   hand over a link, say so plainly — do not describe it as access to one
   tab. If the profile holds sensitive unrelated sessions, warn the human
   before sharing.
+- **Only one viewer at a time.** If a second person opens the same Viewer
+  URL they take over the session and the first is disconnected. Do not
+  hand the same link to two people and expect both to watch.
 - Verify bridge state before claiming success. Return concrete evidence,
   not assumptions. A visible popup is not proof that hosting started.
 - Prefer the bridge path, not the popup click path.

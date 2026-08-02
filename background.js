@@ -241,6 +241,23 @@ async function scheduleOrEnforceHostExpiry(reason = 'schedule') {
     return;
   }
 
+  // KNOWN LIMITATION — expiry is wake-driven, not wall-clock.
+  //
+  // This timer lives in an MV3 service worker, which Chrome may terminate
+  // while idle; the timer dies with it. Expiry is re-enforced from
+  // storage.session on the next wake (see ensureHostStateLoaded /
+  // scheduleOrEnforceHostExpiry), and any viewer message wakes the worker —
+  // so an interactive viewer is always cut off on time. But a passive viewer
+  // that sends nothing keeps receiving the offscreen document's stream (the
+  // frame ticker's last frame) past shareExpiresAt until something else wakes
+  // the worker.
+  //
+  // Chrome's scheduled-wakeup API would close this gap, and its 30s
+  // granularity is ample for a 15-minute share. It is deliberately not used:
+  // the extension declares no such permission, and test/no-alarms.test.js
+  // asserts the worker stays free of it. Adding it is a permission + design
+  // change for Ben to make, not something to slip into this port. Tracked in
+  // docs/final-report.md.
   hostExpiryTimer = setTimeout(() => {
     hostExpiryTimer = null;
     enforceHostExpiry('timeout').catch((e) => {
@@ -670,6 +687,15 @@ async function handleStartHostingCDP(tabId) {
   }
   if (hostStopInProgress) {
     return { error: 'A host stop is in progress' };
+  }
+  // Already hosting. Without this, a duplicate start (stale popup, second
+  // bridge tab, or the exposed self.handleStartHostingCDP automation path)
+  // walks into startScreencastMode, attachDebugger no-ops because
+  // debuggerAttached is still true for the OLD tab, the first CDP command
+  // against the new tab throws, and the failure path tears down the healthy
+  // live session. An accidental duplicate start must not kill a working share.
+  if (hostState.hosting) {
+    return { error: 'Already hosting; stop the current share first' };
   }
 
   hostStartInProgress = true;
@@ -1124,12 +1150,7 @@ function onTabActivated(activeInfo) {
   });
   chrome.tabs.get(activeInfo.tabId, (tab) => {
     if (chrome.runtime.lastError) return;
-    sendToViewer({
-      type: 'tabChanged',
-      tabId: tab.id,
-      url: tab.url || '',
-      title: tab.title || ''
-    });
+    sendTabChanged(tab);
   });
 }
 
@@ -1312,12 +1333,7 @@ async function onTabUpdated(tabId, changeInfo, tab) {
   }
   if (changeInfo.title || changeInfo.url || changeInfo.status === 'complete') {
     if (tabId === hostState.capturedTabId) {
-      sendToViewer({
-        type: 'tabChanged',
-        tabId: tab.id,
-        url: tab.url || '',
-        title: tab.title || ''
-      });
+      sendTabChanged(tab);
       if (changeInfo.status === 'complete') {
         onTabNavigated(tabId);
       }
@@ -1379,6 +1395,15 @@ function teardownTabListeners() {
   chrome.tabs.onRemoved.removeListener(onTabRemoved);
   chrome.tabs.onCreated.removeListener(onTabCreated);
   tabListenersInstalled = false;
+}
+
+// Single vetted sender for tabChanged. onTabActivated fires for ANY tab the
+// user switches to, so without the policy check the viewer learns the URL and
+// title of chrome://, chrome-extension:// and file:// pages that the tab list
+// deliberately excludes.
+function sendTabChanged(tab) {
+  if (!tab || isForbiddenTab(tab)) return;
+  sendTabChanged(tab);
 }
 
 async function sendTabListToViewer() {
@@ -1611,12 +1636,7 @@ async function switchTabUnlocked(tabId, options = {}) {
 
   const tab = await chrome.tabs.get(tabId);
   await persistHostState();
-  sendToViewer({
-    type: 'tabChanged',
-    tabId: tab.id,
-    url: tab.url || '',
-    title: tab.title || ''
-  });
+  sendTabChanged(tab);
   sendToViewer({ type: 'status', capturing: true, tabId });
   await sendTabListToViewer();
   await sendHostMetricsToViewer(true);
@@ -2272,7 +2292,8 @@ if (self.__BROWSERLINK_ENABLE_TEST_HOOKS__) {
     reconcileCapturedTabScreencastGeometryForTest: reconcileCapturedTabScreencastGeometry,
     closeTabForTest: closeTab,
     setHostViewportForTest: setHostViewport,
-    handleControlEventForTest: handleControlEvent
+    handleControlEventForTest: handleControlEvent,
+    sendTabChangedForTest: sendTabChanged
   };
 }
 

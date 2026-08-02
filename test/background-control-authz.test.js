@@ -226,3 +226,36 @@ describe('navigate scheme policy', () => {
     expect(updates).toEqual([]);
   });
 });
+
+describe('already-hosting guard', () => {
+  it('refuses a duplicate start instead of tearing down the live share', async () => {
+    const { context } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({
+      hosting: true, peerId: 'peer-live', capturedTabId: NORMAL,
+      debuggerAttached: true, debuggerAttachedTabId: NORMAL
+    });
+
+    const result = await context.handleStartHostingCDP(NORMAL);
+
+    expect(result.error).toMatch(/already hosting/i);
+    // The live session must be untouched.
+    const state = hooks.getHostStateForTest();
+    expect(state.hosting).toBe(true);
+    expect(state.peerId).toBe('peer-live');
+    expect(state.debuggerAttached).toBe(true);
+  });
+});
+
+describe('tabChanged scheme policy', () => {
+  it('does not leak non-capturable tab urls to the viewer', async () => {
+    const { context } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+
+    expect(hooks.sendTabChangedForTest({ id: EXTENSION_TAB, url: TAB_URLS[EXTENSION_TAB], title: 'bridge' })).toBeUndefined();
+    expect(hooks.sendTabChangedForTest({ id: CHROME_TAB, url: TAB_URLS[CHROME_TAB], title: 'settings' })).toBeUndefined();
+    expect(hooks.sendTabChangedForTest({ id: 99, url: 'file:///etc/passwd', title: 'passwd' })).toBeUndefined();
+  });
+});

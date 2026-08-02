@@ -249,7 +249,20 @@ function setupPeer() {
         warn('[BROWSERLINK:offscreen] Dropping data from superseded connection');
         return;
       }
-      const evt = typeof data === 'string' ? JSON.parse(data) : data;
+      // Untrusted: anyone holding the Viewer URL writes to this channel, so
+      // malformed JSON, null, or a bare string must not throw out of the
+      // PeerJS emitter once per message.
+      let evt;
+      try {
+        evt = typeof data === 'string' ? JSON.parse(data) : data;
+      } catch (e) {
+        warn('[BROWSERLINK:offscreen] Dropping unparseable message from viewer');
+        return;
+      }
+      if (!evt || typeof evt !== 'object' || typeof evt.type !== 'string') {
+        warn('[BROWSERLINK:offscreen] Dropping malformed message from viewer');
+        return;
+      }
 
       if (INPUT_TYPES.has(evt.type)) {
         if (evt.type !== 'mouse' || evt.action !== 'move') {

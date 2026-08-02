@@ -151,6 +151,22 @@ guarantee.
 **Your options:** accept it as defence in depth, or ask for an origin
 allowlist / DNR-based block as a follow-up.
 
+## Deferred for you: switchTab debugger-failure handling
+
+Cadence's fourth finding, left unfixed on purpose.
+
+`switchTabUnlocked` ignores `attachDebugger`'s failure return, so a failed
+attach can leave `hosting: true` with no debugger and no screencast until a
+viewer input happens to trigger recovery. Separately, the reattach catch-all
+treats *any* error in the attach → enable → startScreencast sequence as "tab
+gone" and silently moves capture to the active tab.
+
+Both are real and both are inherited upstream behaviour, not port
+regressions. The second one changes which tab the operator is actually
+sharing without telling them, so the right fix is a product decision about
+what should happen — fail the switch loudly, or stop the host — rather than a
+late unilateral change at the end of a review loop.
+
 ## Decisions made without you
 
 1. **Branch `feat/initial-port`** — handoff said `feature/`, plan and

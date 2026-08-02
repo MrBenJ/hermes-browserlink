@@ -129,6 +129,28 @@ that belong to you, not something to slip into a port under review pressure.
 the permission and durable wake-up and invert that test. It is maybe an
 hour's work either way.
 
+## ⚠️ Needs your decision: private-network filtering is hostname-based
+
+A Viewer URL can drive `navigate`, `newTab` and `switchTab`, so the tab
+policy now refuses loopback, RFC1918, CGNAT, link-local and internal-looking
+hostnames — a link holder cannot point the agent's browser straight at
+`127.0.0.1:8787`, a router panel or `169.254.169.254`.
+
+**What it cannot do:** resolve DNS. A public-looking name that resolves to a
+private address (`127.0.0.1.nip.io`, wildcard-DNS services generally) passes
+the check. Aria confirmed this concretely.
+
+An MV3 extension has no pre-navigation DNS resolution, so closing it properly
+means either an explicit operator allowlist of reachable origins, or a
+network-layer block via `declarativeNetRequest` — both new design surface.
+
+**What I did:** kept the hostname filter (it closes the direct cases cheaply)
+and corrected the README so it is described as defence in depth rather than a
+guarantee.
+
+**Your options:** accept it as defence in depth, or ask for an origin
+allowlist / DNR-based block as a follow-up.
+
 ## Decisions made without you
 
 1. **Branch `feat/initial-port`** — handoff said `feature/`, plan and

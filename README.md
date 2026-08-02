@@ -87,9 +87,17 @@ with a tab switcher, and the host answers tab-list and tab-switch requests
 can enumerate and switch to any other **web** tab in that browser profile
 — including unrelated logged-in sessions. Only `http:`/`https:` tabs are
 capturable; browser-internal, extension, `file://` and other non-web schemes
-are excluded, as are loopback, RFC1918/LAN, link-local and other private
-hosts — a link holder cannot steer the agent's browser at `127.0.0.1`,
-router admin panels or cloud metadata endpoints.
+are excluded, as are literal loopback, RFC1918/LAN, link-local and other
+private hosts.
+
+> **Limit of that check.** It matches on the hostname, not the resolved
+> address, so it stops the direct cases (`127.0.0.1`, `192.168.x`,
+> `169.254.169.254`, `router.local`) but **not** a public-looking domain
+> that resolves to a private address — `127.0.0.1.nip.io` and friends get
+> through. Treat it as defence in depth, not a guarantee. An extension
+> cannot resolve DNS before navigating; a real boundary needs an explicit
+> operator allowlist of reachable origins or a network-layer block. See
+> `docs/final-report.md`.
 
 So the Viewer URL is a bearer capability over the agent browser's normal
 tabs, not a keyhole onto one of them. The host ID is a random 122-bit UUID,

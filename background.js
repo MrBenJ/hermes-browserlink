@@ -1662,7 +1662,16 @@ async function switchTabUnlocked(tabId, options = {}) {
 async function createNewTab(url) {
   const createProps = {};
   if (url) {
-    createProps.url = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+    const normalized = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : 'https://' + url;
+    // Validate BEFORE creating the tab. The delayed switchTab below refuses to
+    // capture a forbidden target, but by then the browser has already issued
+    // the request — which is the whole point of the private-network boundary.
+    if (isForbiddenTab({ id: null, url: normalized })) {
+      warn('[BROWSERLINK:bg] newTab blocked: forbidden URL', normalized);
+      logDiagnostic('new_tab_blocked', { url: normalized });
+      return;
+    }
+    createProps.url = normalized;
   }
   const tab = await chrome.tabs.create(createProps);
   setTimeout(() => switchTab(tab.id), 300);
@@ -2308,7 +2317,8 @@ if (self.__BROWSERLINK_ENABLE_TEST_HOOKS__) {
     closeTabForTest: closeTab,
     setHostViewportForTest: setHostViewport,
     handleControlEventForTest: handleControlEvent,
-    sendTabChangedForTest: sendTabChanged
+    sendTabChangedForTest: sendTabChanged,
+    createNewTabForTest: createNewTab
   };
 }
 

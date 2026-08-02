@@ -16,6 +16,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   const debuggerCommands = [];
   const updates = [];
   const sentToViewer = [];
+  const created = [];
   const listeners = () => ({ addListener() {}, removeListener() {} });
 
   const chrome = {
@@ -56,6 +57,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
         return { id: tabId, windowId: 7, width: 1024, height: 768, url, title: 'Tab' };
       },
       remove: async (tabId) => { removed.push(tabId); },
+      create: async (props) => { created.push(props); return { id: 500, ...props }; },
       update: async (tabId, info) => { updates.push({ tabId, info }); },
       query: async () => [],
       getZoom: async () => 1,
@@ -92,7 +94,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   });
   context.__handleControlEvent = context.__browserlinkBackgroundTestHooks.handleControlEventForTest;
 
-  return { context, removed, windowUpdates, debuggerCommands, fetchCalls, updates, sentToViewer };
+  return { context, removed, windowUpdates, debuggerCommands, fetchCalls, updates, sentToViewer, created };
 }
 
 const NORMAL = 11;
@@ -279,5 +281,47 @@ describe('tabChanged scheme policy', () => {
     expect(hooks.sendTabChangedForTest({ id: EXTENSION_TAB, url: TAB_URLS[EXTENSION_TAB], title: 'bridge' })).toBeUndefined();
     expect(hooks.sendTabChangedForTest({ id: CHROME_TAB, url: TAB_URLS[CHROME_TAB], title: 'settings' })).toBeUndefined();
     expect(hooks.sendTabChangedForTest({ id: 99, url: 'file:///etc/passwd', title: 'passwd' })).toBeUndefined();
+  });
+});
+
+describe('newTab scheme and network policy', () => {
+  async function withHost() {
+    const loaded = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = loaded.context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    return { ...loaded, hooks };
+  }
+
+  it('opens an ordinary public url', async () => {
+    const { hooks, created } = await withHost();
+    await hooks.createNewTabForTest('https://example.org/x');
+    expect(created).toContainEqual({ url: 'https://example.org/x' });
+  });
+
+  it('treats bare input as a hostname', async () => {
+    const { hooks, created } = await withHost();
+    await hooks.createNewTabForTest('example.org');
+    expect(created).toContainEqual({ url: 'https://example.org' });
+  });
+
+  it('refuses loopback, private and link-local targets', async () => {
+    const { hooks, created } = await withHost();
+    for (const url of [
+      'http://127.0.0.1:8787/log',
+      'http://localhost:3000',
+      'http://192.168.1.1/admin',
+      'http://10.0.0.5',
+      'http://169.254.169.254/latest/meta-data'
+    ]) {
+      await hooks.createNewTabForTest(url);
+    }
+    expect(created).toEqual([]);
+  });
+
+  it('refuses non-web schemes', async () => {
+    const { hooks, created } = await withHost();
+    await hooks.createNewTabForTest('file:///etc/passwd');
+    await hooks.createNewTabForTest('chrome://settings');
+    expect(created).toEqual([]);
   });
 });

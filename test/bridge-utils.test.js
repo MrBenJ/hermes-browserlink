@@ -1,21 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { buildViewerUrl, pickDefaultSelectedTab } from '../lib/bridge-utils.js';
+import { buildViewerUrl, normalizeViewerBaseUrl, pickDefaultSelectedTab } from '../lib/bridge-utils.js';
+
+describe('normalizeViewerBaseUrl', () => {
+  it('trims whitespace', () => {
+    expect(normalizeViewerBaseUrl('  http://x/v.html ')).toBe('http://x/v.html');
+  });
+  it('strips an existing fragment', () => {
+    expect(normalizeViewerBaseUrl('http://x/v.html#host=old')).toBe('http://x/v.html');
+  });
+  it('returns empty string for empty input', () => {
+    expect(normalizeViewerBaseUrl('')).toBe('');
+    expect(normalizeViewerBaseUrl(undefined)).toBe('');
+    expect(normalizeViewerBaseUrl('   ')).toBe('');
+  });
+});
 
 describe('buildViewerUrl', () => {
-  it('returns empty string when no peerId is provided', () => {
-    expect(buildViewerUrl('')).toBe('');
-    expect(buildViewerUrl(null)).toBe('');
-    expect(buildViewerUrl(undefined)).toBe('');
+  it('returns empty string without a peer id', () => {
+    expect(buildViewerUrl('', 'http://x/v.html')).toBe('');
   });
-
-  it('builds a viewer URL with the peer id as the host hash param', () => {
-    expect(buildViewerUrl('abc123')).toBe('https://lobsterl.ink/#host=abc123');
+  it('returns empty string without a base url', () => {
+    expect(buildViewerUrl('abc', '')).toBe('');
+    expect(buildViewerUrl('abc')).toBe('');
+    expect(buildViewerUrl('abc', '   ')).toBe('');
   });
-
-  it('percent-encodes peer ids that contain reserved characters', () => {
-    expect(buildViewerUrl('peer id/with+chars&more=')).toBe(
-      'https://lobsterl.ink/#host=peer%20id%2Fwith%2Bchars%26more%3D'
-    );
+  it('builds the url with a #host fragment', () => {
+    expect(buildViewerUrl('abc123', 'http://mac-mini:8787/browserlink-viewer.html'))
+      .toBe('http://mac-mini:8787/browserlink-viewer.html#host=abc123');
+  });
+  it('encodes the peer id', () => {
+    expect(buildViewerUrl('a b/c', 'http://x/v.html'))
+      .toBe('http://x/v.html#host=a%20b%2Fc');
+  });
+  it('replaces a stale fragment on the base', () => {
+    expect(buildViewerUrl('abc', 'http://x/v.html#host=old'))
+      .toBe('http://x/v.html#host=abc');
   });
 });
 

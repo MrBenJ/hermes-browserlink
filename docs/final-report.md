@@ -46,7 +46,7 @@ Nothing outside this repo was modified. `~/.hermes/` was never written to
 | Item | Status |
 |---|---|
 | All spikes documented in `docs/spikes/` | ⚠️ Partial — spike 01 documents why 1–5 could not run; spike 02 answers what was answerable from source. Live spikes still owed. |
-| `npx vitest run` green | ✅ **93 passed, 10 files** |
+| `npx vitest run` green | ✅ **101 passed, 11 files** |
 | No `lobsterl.ink` / hardcoded viewer domain in shipped code | ✅ |
 | `dist/browserlink-viewer.html` builds from one command | ✅ 146.9 KB, verified served over HTTP 200 |
 | INSTALL.md rehearsed from clean state | ❌ **PENDING-HUMAN** |
@@ -144,12 +144,38 @@ the extension does not appear in CDP `/json/list`. Full detail:
 - `/tmp/browserlink-delay-complete` exists, so a re-launch skips the
   80-minute wait.
 
+## Review findings addressed
+
+Both of Aria's findings were reproduced before being fixed.
+
+- **P1 — stale viewer kept privileged control (security).**
+  `peer.on('connection')` reassigned `dataConnection` without closing the
+  previous connection, and neither the `data` nor `close` handler checked
+  ownership. A superseded viewer kept forwarding input/control events,
+  which this extension executes via `chrome.debugger` with `<all_urls>`;
+  and the old connection closing tore down the *new* viewer's state.
+  Fixed by closing the previous connection and fencing `open`/`data`/`close`
+  on `conn === dataConnection`, covered by
+  `test/offscreen-viewer-ownership.test.js` (8 tests, written first — 6
+  failed against the old code, and the 2 that passed were control cases,
+  so the test discriminates). This was **inherited upstream behavior**, not
+  introduced by the port.
+- **P2 — vulnerable lockfile, no CI.** 7 advisories (1 critical:
+  `GHSA-5xrq-8626-4rwp` against the `vitest <=3.2.5` chain upstream pinned
+  at `^1.6.0`). Upgraded vitest to `^4.1.10` (suite passes unchanged),
+  `npm audit fix` for two transitive highs under `serve` → **0
+  vulnerabilities**. Added `.github/workflows/ci.yml` with a test job and an
+  audit job gating on `--audit-level=high`, since the branch had no checks.
+
 ## Verification evidence
 
 ```
 $ npx vitest run
- Test Files  10 passed (10)
-      Tests  93 passed (93)
+ Test Files  11 passed (11)
+      Tests  101 passed (101)
+
+$ npm audit
+found 0 vulnerabilities
 
 $ node scripts/build-viewer.js
 Wrote dist/browserlink-viewer.html (146.9 KB)

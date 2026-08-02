@@ -325,3 +325,42 @@ describe('newTab scheme and network policy', () => {
     expect(created).toEqual([]);
   });
 });
+
+describe('captured tab navigating to a forbidden URL', () => {
+  it('stops hosting when the captured tab lands on a private address', async () => {
+    const { context } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({
+      hosting: true, viewerConnected: true, capturedTabId: NORMAL,
+      debuggerAttached: true, debuggerAttachedTabId: NORMAL
+    });
+
+    // A public URL the viewer requested has redirected to loopback.
+    await hooks.onTabUpdatedForTest(
+      NORMAL,
+      { status: 'complete', url: 'http://127.0.0.1:8787/admin' },
+      { id: NORMAL, url: 'http://127.0.0.1:8787/admin', title: 'local' }
+    );
+
+    expect(hooks.getHostStateForTest().hosting).toBe(false);
+  });
+
+  it('keeps hosting when the captured tab lands on an allowed URL', async () => {
+    const { context } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({
+      hosting: true, viewerConnected: true, capturedTabId: NORMAL,
+      debuggerAttached: true, debuggerAttachedTabId: NORMAL
+    });
+
+    await hooks.onTabUpdatedForTest(
+      NORMAL,
+      { status: 'complete', url: 'https://example.com/next' },
+      { id: NORMAL, url: 'https://example.com/next', title: 'ok' }
+    );
+
+    expect(hooks.getHostStateForTest().hosting).toBe(true);
+  });
+});

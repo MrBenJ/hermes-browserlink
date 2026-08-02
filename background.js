@@ -1326,6 +1326,23 @@ async function onTabUpdated(tabId, changeInfo, tab) {
   }
   if (!hostState.hosting || !hostState.viewerConnected) return;
 
+  // Enforce the boundary on where the captured tab actually LANDED, not just
+  // on what the viewer asked for. navigate/newTab validate the requested URL,
+  // but a redirect, meta refresh, link click or page-initiated navigation can
+  // still carry the tab to a forbidden target — and filtering tabChanged only
+  // hides the URL, it does not stop the screencast or detach the debugger.
+  if (tabId === hostState.capturedTabId && (changeInfo.url || changeInfo.status === 'complete')) {
+    if (isForbiddenTab(tab)) {
+      warn('[BROWSERLINK:bg] Captured tab navigated to a forbidden URL; stopping host:', tab && tab.url);
+      logDiagnostic('captured_tab_forbidden_navigation', {
+        tabId,
+        url: (tab && tab.url) || ''
+      });
+      await handleStopHosting('forbidden_navigation');
+      return;
+    }
+  }
+
   const pendingUpdates = [];
   if (tabId === hostState.capturedTabId) {
     if (changeInfo.status === 'loading') {

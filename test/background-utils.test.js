@@ -307,3 +307,17 @@ describe('isForbiddenTab private-network policy', () => {
     expect(forbid('http://box.internal')).toBe(true);
   });
 });
+
+describe('isForbiddenTab trailing-dot hostnames', () => {
+  const forbid = (url) => isForbiddenTab({ id: 1, url });
+
+  it('refuses root-dot forms of internal hosts', () => {
+    expect(forbid('http://localhost.:3000')).toBe(true);
+    expect(forbid('http://router.local.')).toBe(true);
+    expect(forbid('http://box.internal.')).toBe(true);
+  });
+
+  it('does not overblock a public FQDN with a trailing dot', () => {
+    expect(forbid('https://example.com.')).toBe(false);
+  });
+});

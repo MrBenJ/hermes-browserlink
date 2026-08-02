@@ -158,7 +158,12 @@ function setupPeer() {
     // peer is either a superseded viewer or a media-only caller — both would
     // otherwise keep receiving the hosted tab's screencast, which can show
     // login challenges and account pages.
-    if (activeViewerPeerId && call.peer && call.peer !== activeViewerPeerId) {
+    // No owner yet means no data channel, so this would be a silent
+    // video-only session: viewerConnected stays false, the operator sees
+    // "no viewer" while the tab is on screen, and nothing the worker relies
+    // on to enforce share expiry ever fires. Possession of the peer id is not
+    // enough — the viewer must own the data channel first.
+    if (!activeViewerPeerId || !call.peer || call.peer !== activeViewerPeerId) {
       warn('[BROWSERLINK:offscreen] Rejecting media call from non-owning peer');
       try {
         call.close();
@@ -224,12 +229,15 @@ function setupPeer() {
       } catch (e) {
         warn('[BROWSERLINK:offscreen] Failed to close superseded connection:', e.message || e);
       }
-      // Drop the old viewer's video too. Closing its data channel alone would
-      // leave an established media call streaming the hosted tab.
-      if (currentCall && activeViewerPeerId && currentCall.peer !== activeViewerPeerId) {
-        closeCurrentCall('its viewer was superseded');
-        stopFrameTicker();
-      }
+    }
+
+    // Drop any media call that does not belong to the new owner. This sits
+    // outside the `previous` check on purpose: a call can predate the first
+    // data connection, and scoping the cleanup to the supersede case left
+    // that one streaming alongside the legitimate viewer.
+    if (currentCall && currentCall.peer !== activeViewerPeerId) {
+      closeCurrentCall('it does not belong to the current viewer');
+      stopFrameTicker();
     }
 
     conn.on('open', () => {

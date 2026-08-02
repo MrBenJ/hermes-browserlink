@@ -158,7 +158,12 @@ describe('offscreen screencast frame drawing', () => {
     await Promise.resolve();
     drawCalls.length = 0;
 
+    // Media is gated on data-channel ownership, so establish the viewer's
+    // data connection first — otherwise the call is rejected and this test
+    // would pass without ever reaching the redraw path it exists to check.
+    peerHandlers.connection({ peer: 'peer-viewer', on: () => {}, close: () => {}, send: () => {} });
     peerHandlers.call({
+      peer: 'peer-viewer',
       peerConnection: { getSenders: () => [] },
       answer: () => {},
       on: () => {}

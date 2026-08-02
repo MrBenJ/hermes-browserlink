@@ -303,20 +303,35 @@ describe('offscreen viewer ownership', () => {
     expect(stranger.closed).toBe(true);
   });
 
-  // Deliberate: before any viewer owns the session there is no peer id to
-  // check against, and a caller can only reach us by already holding the
-  // secret host peer id — the same capability that would let it open a data
-  // connection and take ownership outright. Rejecting here would buy no
-  // confidentiality and would break the legitimate case where the media call
-  // is observed before the data connection.
-  it('accepts a media call placed before any viewer owns the session', () => {
+  // Revised after review: a media-only caller was previously accepted on the
+  // reasoning that holding the peer id is already the capability. But such a
+  // session never sets viewerConnected, so the operator sees "no viewer" while
+  // the tab is being watched — and a silent viewer is exactly the one that can
+  // outlive share expiry. Media is now gated on data-channel ownership.
+  it('refuses a media-only caller when no viewer owns the session', () => {
     const { peerHandlers } = loadOffscreen();
 
-    const call = makeCall('peer-early');
+    const call = makeCall('peer-lurker');
     peerHandlers.call(call);
 
-    expect(call.answered).toBe(true);
-    expect(call.closed).toBe(false);
+    expect(call.answered).toBe(false);
+    expect(call.closed).toBe(true);
+  });
+
+  it('closes an early call from peer A when peer B becomes the data owner', () => {
+    const { peerHandlers } = loadOffscreen();
+
+    // A owns the session and is streaming.
+    const a = makeConn('a');
+    peerHandlers.connection(a);
+    const aCall = makeCall(a.peer);
+    peerHandlers.call(aCall);
+    expect(aCall.answered).toBe(true);
+
+    // B takes ownership; A's video must not survive it.
+    peerHandlers.connection(makeConn('b'));
+
+    expect(aCall.closed).toBe(true);
   });
 
   it('closes a superseded viewer media call when a new owner calls', () => {

@@ -4,7 +4,6 @@
 importScripts('lib/share-timeout-utils.js', 'lib/background-utils.js', 'lib/bridge-utils.js');
 
 const SCREENCAST_JPEG_QUALITY = 92;
-const DIAGNOSTIC_LOG_URL = 'http://127.0.0.1:8788/log';
 const HOST_STATE_STORAGE_KEY = 'browserlinkHostState';
 
 const DEFAULT_HOST_STATE = {
@@ -52,18 +51,18 @@ let hostStateLoadPromise = null;
 let tabListenersInstalled = false;
 let recentDiagnostics = [];
 let lastDiagnosticError = null;
-let remoteLoggingEnabled = false;
+let debugLoggingEnabled = false;
 const OPENER_AUTO_FOLLOW_RETRY_MS = 300;
 const pendingOpenerAutoFollowTabs = new Map();
 const runSerializedSwitch = createSwitchSerializer();
 
-// Load opt-in remote logging flag from storage (default: off)
+// Load opt-in debug logging flag from storage (default: off)
 chrome.storage.local.get({ browserlinkDebugLoggingEnabled: false }, (result) => {
-  remoteLoggingEnabled = !!result.browserlinkDebugLoggingEnabled;
+  debugLoggingEnabled = !!result.browserlinkDebugLoggingEnabled;
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.browserlinkDebugLoggingEnabled) {
-    remoteLoggingEnabled = !!changes.browserlinkDebugLoggingEnabled.newValue;
+    debugLoggingEnabled = !!changes.browserlinkDebugLoggingEnabled.newValue;
   }
 });
 
@@ -84,9 +83,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 const _log = console.log.bind(console);
 const _warn = console.warn.bind(console);
 const _error = console.error.bind(console);
-function log(...args) { if (remoteLoggingEnabled) _log(...args); }
-function warn(...args) { if (remoteLoggingEnabled) _warn(...args); }
-function error(...args) { if (remoteLoggingEnabled) _error(...args); }
+function log(...args) { if (debugLoggingEnabled) _log(...args); }
+function warn(...args) { if (debugLoggingEnabled) _warn(...args); }
+function error(...args) { if (debugLoggingEnabled) _error(...args); }
 
 function serializeHostState() {
   return {
@@ -178,13 +177,6 @@ function logDiagnostic(event, details = {}) {
     };
   }
 
-  if (remoteLoggingEnabled) {
-    fetch(DIAGNOSTIC_LOG_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(() => {});
-  }
 }
 
 function normalizeShareTimestamp(value) {

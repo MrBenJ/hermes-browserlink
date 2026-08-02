@@ -65,9 +65,10 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
     }
   };
 
+  const fetchCalls = [];
   const context = {
     chrome, console, setTimeout, clearTimeout,
-    fetch: async () => ({}),
+    fetch: async (...args) => { fetchCalls.push(args); return {}; },
     self: null,
     __BROWSERLINK_ENABLE_TEST_HOOKS__: true
   };
@@ -82,7 +83,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
     filename: 'background.js'
   });
 
-  return { context, removed, windowUpdates, debuggerCommands };
+  return { context, removed, windowUpdates, debuggerCommands, fetchCalls };
 }
 
 const NORMAL = 11;
@@ -172,5 +173,18 @@ describe('setViewport validation', () => {
     const override = debuggerCommands.find((c) => c.method === 'Emulation.setDeviceMetricsOverride');
     expect(override.params.width).toBeLessThanOrEqual(8192);
     expect(override.params.height).toBeGreaterThan(0);
+  });
+});
+
+describe('diagnostics stay local', () => {
+  it('makes no outbound HTTP request when diagnostic events are recorded', async () => {
+    const { context, fetchCalls } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+
+    // Any control path that logs a diagnostic will do; a blocked close logs one.
+    await hooks.closeTabForTest(EXTENSION_TAB);
+
+    expect(fetchCalls).toEqual([]);
   });
 });

@@ -121,11 +121,17 @@ the extension does not appear in CDP `/json/list`. Full detail:
    only `bridge.js`, but `background.js` and `popup.js` also called it and
    would have silently broken under the two-arg signature.
 8. **`dist/` gitignored** — generated, one-command rebuild.
-9. **Kept `scripts/log-server.js`** against the plan's stated default: it
-   is the receiver for `background.js`'s live `DIAGNOSTIC_LOG_URL`.
-10. **Moved diagnostic logging 8787 → 8788.** The plan puts the viewer on
-    8787, which collided with log-server's default; running both would
-    fail to bind.
+9. **Deleted `scripts/log-server.js` and the remote diagnostic POST**
+    (revised in review). Initially kept against the plan's default because
+    `background.js` posted to it; Aria then flagged it as an unauthenticated
+    localhost write target with wildcard CORS. Since the bridge's
+    Diagnostics panel reads the in-memory `recentDiagnostics` buffer and
+    never needed the server, deleting both sides removes the surface
+    entirely and lands on the plan's stated default. Console-log gating via
+    `browserlinkDebugLoggingEnabled` is unchanged; the flag it sets is now
+    named `debugLoggingEnabled`, since nothing is sent remotely.
+10. **Diagnostic port question is moot** — the 8787→8788 move made during
+    Task 21 disappeared with the log server. The viewer owns 8787 outright.
 11. **Added `escapeClosingScriptTag`** to the viewer build — defensive
     against a `</script>` in future vendored JS. No current source has one.
 

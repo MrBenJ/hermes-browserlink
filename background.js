@@ -708,9 +708,33 @@ async function startScreencastMode(tabId) {
   // Attach debugger (needed for screencast AND input)
   await attachDebugger(tabId);
   if (!hostState.debuggerAttached) {
+    // Nothing privileged is running yet, but capturedTabId was already set —
+    // clear it so a failed start leaves no half-populated host state behind.
+    hostState = { ...DEFAULT_HOST_STATE };
     return { error: 'Failed to attach debugger for screencast' };
   }
 
+  try {
+    return await startScreencastModeAfterAttach(tabId);
+  } catch (err) {
+    // Startup failed after the debugger was attached, and possibly after
+    // Page.startScreencast and the offscreen document were already running.
+    // Without this teardown the tab keeps a privileged debugger attachment and
+    // a live screencast pipeline even though the UI reports "not hosting",
+    // which also blocks later debugger users until the browser restarts.
+    error('[BROWSERLINK:bg] Host startup failed after attach; tearing down:', err.message || err);
+    logDiagnostic('start_cdp_cleanup', { error: err.message || String(err), tabId });
+    try {
+      await handleStopHosting('start_failed');
+    } catch (cleanupErr) {
+      warn('[BROWSERLINK:bg] Cleanup after failed start also failed:',
+        cleanupErr.message || cleanupErr);
+    }
+    throw err;
+  }
+}
+
+async function startScreencastModeAfterAttach(tabId) {
   // Use the tab's actual CSS viewport. Auto-overriding the viewport on start
   // can make Chrome scale the host tab down, which then makes the viewer look tiny.
   const { width, height } = await getCurrentViewport(tabId);

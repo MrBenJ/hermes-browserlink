@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "BrowserLink",
+  "version": "1.0.0",
+  "description": "Remote browser tab viewing and control via WebRTC — hand a human one blocked step without sharing credentials",
+  "permissions": [
+    "tabs",
+    "debugger",
+    "activeTab",
+    "offscreen",
+    "scripting",
+    "clipboardWrite",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "BrowserLink"
+  },
+  "icons": {},
+  "web_accessible_resources": []
+}

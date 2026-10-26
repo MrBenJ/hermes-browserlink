@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildViewerUrl, normalizeViewerBaseUrl, pickDefaultSelectedTab } from '../lib/bridge-utils.js';
+import { buildViewerUrl, normalizeViewerBaseUrl, pickDefaultSelectedTab, pickViewerUrlPeerId, syncConnectPeerIdInput } from '../lib/bridge-utils.js';
 
 describe('normalizeViewerBaseUrl', () => {
   it('trims whitespace', () => {
@@ -99,5 +99,46 @@ describe('pickDefaultSelectedTab', () => {
       ]
     };
     expect(pickDefaultSelectedTab(state)).toBe(10);
+  });
+});
+
+describe('pickViewerUrlPeerId', () => {
+  it('uses the active host peer id', () => {
+    expect(pickViewerUrlPeerId('P2', '')).toBe('P2');
+  });
+
+  it('ignores a stale id left in the connect field once a new host is up', () => {
+    // Stop -> Start mints a new peer id; the Viewer URL must follow it, or
+    // the agent hands out a dead link (Phase A B1).
+    expect(pickViewerUrlPeerId('P2', 'P1')).toBe('P2');
+  });
+
+  it('falls back to the typed id when nothing is hosting', () => {
+    expect(pickViewerUrlPeerId(null, 'remote-peer')).toBe('remote-peer');
+    expect(pickViewerUrlPeerId('', '  ')).toBe('');
+  });
+});
+
+describe('syncConnectPeerIdInput', () => {
+  it('fills an empty field with the host peer id', () => {
+    expect(syncConnectPeerIdInput({ value: '', lastAutoFilled: '', hostPeerId: 'P1' }))
+      .toEqual({ value: 'P1', lastAutoFilled: 'P1' });
+  });
+
+  it('follows the host across Stop -> Start when the value was auto-filled', () => {
+    const afterStop = syncConnectPeerIdInput({ value: 'P1', lastAutoFilled: 'P1', hostPeerId: null });
+    expect(afterStop).toEqual({ value: '', lastAutoFilled: '' });
+    const afterStart = syncConnectPeerIdInput({ ...afterStop, hostPeerId: 'P2' });
+    expect(afterStart).toEqual({ value: 'P2', lastAutoFilled: 'P2' });
+  });
+
+  it('replaces an auto-filled id directly when the host restarts between refreshes', () => {
+    expect(syncConnectPeerIdInput({ value: 'P1', lastAutoFilled: 'P1', hostPeerId: 'P2' }))
+      .toEqual({ value: 'P2', lastAutoFilled: 'P2' });
+  });
+
+  it('leaves an id the operator typed alone', () => {
+    expect(syncConnectPeerIdInput({ value: 'typed', lastAutoFilled: 'P1', hostPeerId: 'P2' }))
+      .toEqual({ value: 'typed', lastAutoFilled: 'P1' });
   });
 });

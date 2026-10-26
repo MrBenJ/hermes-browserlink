@@ -699,6 +699,10 @@ async function handleStartHostingCDP(tabId) {
   }
 
   hostStartInProgress = true;
+  // A new share starts with a clean Last Error. The previous share's error
+  // otherwise stays on the bridge indefinitely and reads as a fault in this
+  // one; anything that goes wrong from here on is recorded afresh.
+  lastDiagnosticError = null;
   try {
     if (!tabId) {
       const tab = await findCapturableTab();
@@ -2354,7 +2358,8 @@ if (self.__BROWSERLINK_ENABLE_TEST_HOOKS__) {
     setHostViewportForTest: setHostViewport,
     handleControlEventForTest: handleControlEvent,
     sendTabChangedForTest: sendTabChanged,
-    createNewTabForTest: createNewTab
+    createNewTabForTest: createNewTab,
+    getDiagnosticsForTest: getDiagnosticsPayload
   };
 }
 

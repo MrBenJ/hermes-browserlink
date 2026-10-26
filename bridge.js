@@ -111,14 +111,18 @@ function getSelectedTabId() {
 // the service worker and popup.
 let currentViewerBaseUrl = '';
 
+// The peer id the bridge last wrote into the "Peer ID to Connect" field, so
+// it can tell its own stale value from one the operator typed.
+let autoFilledConnectPeerId = '';
+
 const VIEWER_URL_NO_BASE_HINT = 'Set Viewer Base URL to get a shareable link';
 const VIEWER_URL_NO_HOST_HINT = 'No active host viewer URL';
 
-// Single source of truth for the Viewer URL display. Prefers the peer id
-// typed into the connect field, falling back to the active host's peer id.
+// Single source of truth for the Viewer URL display. Uses the active host's
+// peer id, falling back to the id typed into the connect field only when
+// nothing is hosting (see pickViewerUrlPeerId).
 function refreshViewerUrlField() {
-  const requestedViewerPeerId = statusEls.viewerPeerId.value.trim();
-  const peerId = requestedViewerPeerId || state.status?.peerId || '';
+  const peerId = pickViewerUrlPeerId(state.status?.peerId, statusEls.viewerPeerId.value);
   if (!peerId) {
     statusEls.viewerUrl.textContent = VIEWER_URL_NO_HOST_HINT;
     return;
@@ -203,9 +207,15 @@ function renderStatus() {
       ].join('\n')
     : 'No captured tab';
 
-  if (!statusEls.viewerPeerId.value && status.peerId) {
-    statusEls.viewerPeerId.value = status.peerId;
+  const connectField = syncConnectPeerIdInput({
+    value: statusEls.viewerPeerId.value,
+    lastAutoFilled: autoFilledConnectPeerId,
+    hostPeerId: status.peerId
+  });
+  if (statusEls.viewerPeerId.value !== connectField.value) {
+    statusEls.viewerPeerId.value = connectField.value;
   }
+  autoFilledConnectPeerId = connectField.lastAutoFilled;
 
   refreshViewerUrlField();
 
@@ -431,6 +441,9 @@ async function withAction(name, fn) {
 }
 
 async function startHost(tabId) {
+  // The service worker clears its Last Error for a new share; drop the
+  // bridge's own stale one with it.
+  state.bridgeLastError = null;
   const result = await chrome.runtime.sendMessage({
     action: 'startHostingCDP',
     tabId

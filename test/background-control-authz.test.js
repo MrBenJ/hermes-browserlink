@@ -10,7 +10,7 @@ const repoRoot = join(__dirname, '..');
 // Control events arrive over the WebRTC data channel, which anyone holding the
 // Viewer URL can write to directly. These tests treat that channel as hostile
 // input rather than as "whatever the viewer UI happens to send".
-function loadBackground({ tabsByIdiUrl = {} } = {}) {
+function loadBackground({ tabsByIdiUrl = {}, queryTabs = [] } = {}) {
   const removed = [];
   const windowUpdates = [];
   const debuggerCommands = [];
@@ -18,6 +18,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
   const sentToViewer = [];
   const created = [];
   const listeners = () => ({ addListener() {}, removeListener() {} });
+  const runtimeListeners = new Set();
 
   const chrome = {
     storage: {
@@ -31,9 +32,19 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
         if (message && message.action === 'offscreen:sendToViewer') {
           sentToViewer.push(message.message);
         }
+        // Stand in for the offscreen document: once hosting starts it reports
+        // a fresh peer id, which is what lets a share start complete.
+        if (message && message.action === 'offscreen:startHostScreencast') {
+          setTimeout(() => {
+            for (const listener of [...runtimeListeners]) listener({ action: 'peerReady', peerId: 'peer-new' });
+          }, 0);
+        }
         return {};
       },
-      onMessage: listeners()
+      onMessage: {
+        addListener(listener) { runtimeListeners.add(listener); },
+        removeListener(listener) { runtimeListeners.delete(listener); }
+      }
     },
     offscreen: { createDocument: async () => {}, closeDocument: async () => {} },
     debugger: {
@@ -59,7 +70,7 @@ function loadBackground({ tabsByIdiUrl = {} } = {}) {
       remove: async (tabId) => { removed.push(tabId); },
       create: async (props) => { created.push(props); return { id: 500, ...props }; },
       update: async (tabId, info) => { updates.push({ tabId, info }); },
-      query: async () => [],
+      query: async () => queryTabs,
       getZoom: async () => 1,
       setZoom: async () => {},
       sendMessage: async () => {},
@@ -386,5 +397,22 @@ describe('focusTab authorization', () => {
     await expect(
       hooks.handleControlEventForTest({ type: 'focusTab', tabId: NORMAL })
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('Last Error across shares', () => {
+  it('clears the previous share\'s error when a new share starts', async () => {
+    const { context } = loadBackground({ tabsByIdiUrl: TAB_URLS });
+    const hooks = context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+
+    // An earlier share left an error behind (a blocked close logs one).
+    await hooks.closeTabForTest(EXTENSION_TAB);
+    expect(hooks.getDiagnosticsForTest().lastError).not.toBeNull();
+
+    const result = await context.handleStartHostingCDP(NORMAL);
+
+    expect(result.peerId).toBe('peer-new');
+    expect(hooks.getDiagnosticsForTest().lastError).toBeNull();
   });
 });

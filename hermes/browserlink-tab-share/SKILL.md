@@ -155,6 +155,7 @@ Before replying, confirm every relevant item:
 - If the extension does not appear in CDP `/json/list` at all, check
   whether the browser is running **headless**. MV3 extensions do not load
   in Chromium's headless-shell build; Hermes needs
-  `AGENT_BROWSER_HEADED=true`. See `INSTALL.md` § 4.1.
+  `AGENT_BROWSER_HEADED=true`. See `INSTALL.md` § 4.1 and the annotated
+  `hermes/browserlink.env.example` in the repo.
 - Unpacked extension IDs derive from the install path. If the durable path
   moved, the ID changed and `BRIDGE_URL` above is stale.

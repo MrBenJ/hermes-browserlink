@@ -212,7 +212,11 @@ ID off a host-tab overlay.
 
 ### Installing
 
-Full instructions: [`INSTALL.md`](./INSTALL.md).
+Full instructions: [`INSTALL.md`](./INSTALL.md). The Hermes `.env` lines
+ship as an annotated, fill-in-the-path example:
+[`hermes/browserlink.env.example`](./hermes/browserlink.env.example). It
+works on macOS and Linux; replace `/ABSOLUTE/PATH/TO/HERMES_HOME` with your
+Hermes home written out in full (`.env` does not expand `~` or `$HOME`).
 
 ### Hermes skill
 

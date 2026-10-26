@@ -71,9 +71,10 @@ rsync -a --delete \
   <path-to-this-repo>/ ~/.hermes/browser-extensions/browserlink/
 ```
 
-Durable path: `~/.hermes/browser-extensions/browserlink`
+Durable path: `~/.hermes/browser-extensions/browserlink` (if Hermes uses a
+different home, e.g. `$HERMES_HOME`, put it under that home instead).
 
-Use that absolute path in every flag below. Re-run this `rsync` after
+Use that path, written out as an absolute path, in every flag below. Re-run this `rsync` after
 pulling repo updates, then restart the browser.
 
 ## 4. Hermes local-mode install
@@ -103,18 +104,36 @@ the env var for exactly that reason.
 
 ### 4.2 The extension flags
 
-Add to `~/.hermes/.env`:
+An annotated, ready-to-fill block ships at
+[`hermes/browserlink.env.example`](./hermes/browserlink.env.example). It
+explains every line; read it before editing the human's `.env`. The core
+lines are:
 
 ```
-AGENT_BROWSER_ARGS=--load-extension=/Users/<you>/.hermes/browser-extensions/browserlink,--disable-extensions-except=/Users/<you>/.hermes/browser-extensions/browserlink
+AGENT_BROWSER_HEADED=true
+AGENT_BROWSER_ARGS=--load-extension=/ABSOLUTE/PATH/TO/HERMES_HOME/browser-extensions/browserlink,--disable-extensions-except=/ABSOLUTE/PATH/TO/HERMES_HOME/browser-extensions/browserlink,--disable-backgrounding-occluded-windows
 ```
+
+`--disable-backgrounding-occluded-windows` keeps frames flowing when the
+browser window is hidden or covered, at the cost of extra CPU/GPU while
+hidden. It is recommended, not required.
 
 Use the **absolute** path — `$HOME` and `~` are not expanded inside
-`.env` values.
+`.env` values. To print the block with your path filled in (works on macOS
+and Linux; it only prints, it edits nothing):
+
+```bash
+H="${HERMES_HOME:-$HOME/.hermes}"
+sed "s#/ABSOLUTE/PATH/TO/HERMES_HOME#$H#g" hermes/browserlink.env.example
+```
 
 **Separator:** `AGENT_BROWSER_ARGS` is **comma- or newline-separated**
 (Hermes `website/docs/reference/environment-variables.md:151`). Not
-space-separated.
+space-separated, and no quotes.
+
+`.env` is read once when Hermes starts, so a change needs a **full Hermes
+restart**. Rollback is restoring the backup of `.env` (or deleting the
+BrowserLink block) and restarting again.
 
 ### 4.3 Merge rules — never blind-replace
 
@@ -125,7 +144,7 @@ space-separated.
   exists, do **not** add a second copy of that flag. Chromium takes the
   last occurrence. Merge BrowserLink's path into the existing flag's own
   comma-separated **path list**:
-  `--load-extension=/existing/one,/Users/<you>/.hermes/browser-extensions/browserlink`
+  `--load-extension=/existing/one,/ABSOLUTE/PATH/TO/HERMES_HOME/browser-extensions/browserlink`
 - Setting `AGENT_BROWSER_ARGS` **disables** Hermes' auto-injection of
   `--no-sandbox,--disable-dev-shm-usage`
   (`tools/browser_tool.py:2447-2461`). That injection is gated on
@@ -306,8 +325,8 @@ The skill ships with placeholders. Patch the **runtime copy** — the one the
 Hermes runtime actually loads — not just the repo copy.
 
 1. Copy `hermes/browserlink-tab-share/` to the runtime skills location.
-   On this machine `~/.hermes/skills/` is organized into category
-   subdirectories (`apple/`, `devops/`, `github/`, …); place the skill
+   Hermes' `skills/` directory may be organized into category
+   subdirectories (e.g. `devops/`, `github/`, …); place the skill
    where the runtime will actually discover it, and **verify** discovery
    rather than assuming a path.
 2. In that runtime copy set:

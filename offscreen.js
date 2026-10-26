@@ -149,6 +149,39 @@ function closeCurrentCall(reason) {
   }
 }
 
+// How long a flush close may wait for the superseded viewer to acknowledge
+// before the connection is torn down regardless. The connection is already
+// fenced off, so this only bounds how long a dead channel lingers.
+const SUPERSEDED_CLOSE_FALLBACK_MS = 2000;
+
+// Tell a superseded viewer why it is being dropped, then close it. A bare
+// close() looks like a network drop to the viewer, which reconnects and takes
+// the session back from the new owner — the two then steal it from each other
+// indefinitely. PeerJS' flush close queues a close marker behind the
+// superseded message, so the message is delivered before the channel closes.
+// A connection that never opened cannot carry the message (and a flush close
+// on it would only fail to send the marker), so it is closed outright.
+function closeSupersededConnection(conn) {
+  const canNotify = Boolean(conn.open);
+  if (canNotify) {
+    try {
+      conn.send(JSON.stringify({ type: 'superseded' }));
+    } catch (e) {
+      warn('[BROWSERLINK:offscreen] Failed to notify superseded viewer:', e.message || e);
+    }
+  }
+  try {
+    conn.close(canNotify ? { flush: true } : undefined);
+  } catch (e) {
+    warn('[BROWSERLINK:offscreen] Failed to close superseded connection:', e.message || e);
+  }
+  setTimeout(() => {
+    try {
+      conn.close();
+    } catch (e) {}
+  }, SUPERSEDED_CLOSE_FALLBACK_MS);
+}
+
 // --- PeerJS setup ---
 
 function setupPeer() {
@@ -233,11 +266,7 @@ function setupPeer() {
     activeViewerPeerId = conn.peer || null;
     if (previous && previous !== conn) {
       log('[BROWSERLINK:offscreen] Superseding previous viewer connection');
-      try {
-        previous.close();
-      } catch (e) {
-        warn('[BROWSERLINK:offscreen] Failed to close superseded connection:', e.message || e);
-      }
+      closeSupersededConnection(previous);
     }
 
     // Drop any media call that does not belong to the new owner. This sits

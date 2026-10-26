@@ -177,9 +177,28 @@ function applyHostStoppedState(state = {}, reason) {
   };
 }
 
+// A newer viewer took over the share. Like a stopped host this is final for
+// this viewer: reconnecting would just steal the session back, and the two
+// viewers would then take it from each other indefinitely.
+function applySupersededState(state = {}) {
+  return {
+    ...state,
+    connectedPeerId: null,
+    reconnectAttempts: 0,
+    shouldClearReconnectTimer: true,
+    shouldReconnect: false,
+    overlayHidden: false,
+    overlayMessage: 'Another viewer took over this share. Reopen the link to take it back.',
+    overlayError: '',
+    statusText: 'Another viewer took over',
+    statusClass: 'error'
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     applyHostStoppedState,
+    applySupersededState,
     createMobilePasteForwardState,
     diffMobileKeyboardText,
     evaluateMobilePasteForward,

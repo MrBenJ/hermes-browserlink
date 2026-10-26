@@ -21,11 +21,14 @@ function makeConn(label) {
     on(eventName, listener) {
       handlers[eventName] = listener;
     },
-    close() {
+    closeArgs: [],
+    close(options) {
+      this.closeArgs.push(options);
       this.closed = true;
       this.open = false;
     },
     send(payload) {
+      if (!this.open) throw new Error('send on a closed connection');
       this.sent.push(payload);
     },
     fire(eventName, arg) {
@@ -150,6 +153,46 @@ describe('offscreen viewer ownership', () => {
 
     expect(first.closed).toBe(true);
     expect(second.closed).toBe(false);
+  });
+
+  it('tells the superseded viewer why before closing it', () => {
+    const { peerHandlers } = loadOffscreen();
+    const first = makeConn('first');
+    const second = makeConn('second');
+
+    peerHandlers.connection(first);
+    peerHandlers.connection(second);
+
+    // Without an explicit reason the stock viewer treats the close as a
+    // network drop and reconnects, stealing the session back.
+    expect(first.sent.map((p) => JSON.parse(p))).toEqual([{ type: 'superseded' }]);
+    expect(second.sent).toEqual([]);
+  });
+
+  it('flushes the superseded message before the connection closes', () => {
+    const { peerHandlers } = loadOffscreen();
+    const first = makeConn('first');
+    const second = makeConn('second');
+
+    peerHandlers.connection(first);
+    peerHandlers.connection(second);
+
+    // A plain close() can drop the queued superseded message; PeerJS'
+    // flush close sends it first and closes once the peer acknowledges.
+    expect(first.closeArgs[0]).toEqual({ flush: true });
+  });
+
+  it('still closes a superseded connection that never opened', () => {
+    const { peerHandlers } = loadOffscreen();
+    const first = makeConn('first');
+    first.open = false;
+    const second = makeConn('second');
+
+    peerHandlers.connection(first);
+    expect(() => peerHandlers.connection(second)).not.toThrow();
+
+    expect(first.sent).toEqual([]);
+    expect(first.closed).toBe(true);
   });
 
   it('ignores input from a superseded connection', () => {

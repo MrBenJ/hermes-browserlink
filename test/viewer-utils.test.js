@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   applyHostStoppedState,
+  applySupersededState,
   createMobilePasteForwardState,
   diffMobileKeyboardText,
   evaluateMobilePasteForward,
@@ -137,10 +138,32 @@ describe('host stopped viewer state', () => {
   });
 });
 
+describe('superseded viewer state', () => {
+  it('ends the session for good and says another viewer took over', () => {
+    expect(applySupersededState({
+      connectedPeerId: 'host-peer',
+      reconnectAttempts: 4,
+      overlayHidden: true
+    })).toEqual({
+      connectedPeerId: null,
+      reconnectAttempts: 0,
+      shouldClearReconnectTimer: true,
+      shouldReconnect: false,
+      overlayHidden: false,
+      overlayMessage: 'Another viewer took over this share. Reopen the link to take it back.',
+      overlayError: '',
+      statusText: 'Another viewer took over',
+      statusClass: 'error'
+    });
+  });
+});
+
 describe('hosted viewer helper copy', () => {
   it('exports host-stopped helpers with behavior matching the extension viewer helpers', () => {
     expect(hostedViewerUtils.getHostStoppedMessage).toBeTypeOf('function');
     expect(hostedViewerUtils.applyHostStoppedState).toBeTypeOf('function');
+    expect(hostedViewerUtils.applySupersededState({ connectedPeerId: 'p' }))
+      .toEqual(applySupersededState({ connectedPeerId: 'p' }));
 
     for (const reason of ['timeout', 'manual', undefined]) {
       expect(hostedViewerUtils.getHostStoppedMessage(reason)).toBe(getHostStoppedMessage(reason));

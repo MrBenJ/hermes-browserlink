@@ -38,7 +38,10 @@ let mobilePasteForwardState = createMobilePasteForwardState();
 let connectedPeerId = null;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
-let hostStoppedReceived = false;
+// Set when the host ends this viewer's session on purpose — the share stopped
+// or another viewer took over. A closed channel after that is not a network
+// drop, so nothing may reconnect until the human explicitly connects again.
+let sessionEnded = false;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 20;
@@ -107,7 +110,7 @@ function syncMobilePasteButtonState(isConnected = canForwardInput()) {
 
 function startConnect(hostPeerId) {
   if (!hostPeerId) return;
-  hostStoppedReceived = false;
+  sessionEnded = false;
   connectedPeerId = hostPeerId;
   reconnectAttempts = 0;
   clearReconnectTimer();
@@ -193,6 +196,7 @@ function connect(hostPeerId) {
 
   peer.on('disconnected', () => {
     // PeerJS lost connection to signaling server
+    if (sessionEnded) return;
     if (peer && !peer.destroyed) {
       peer.reconnect();
     }
@@ -200,7 +204,7 @@ function connect(hostPeerId) {
 }
 
 function handleDisconnect(reason) {
-  if (hostStoppedReceived) return;
+  if (sessionEnded) return;
 
   setStatus('Disconnected', '');
   closeMobilePasteSheet({ restoreVideoFocus: false });
@@ -229,18 +233,34 @@ function scheduleReconnect() {
   overlayMsg.textContent = `Connection lost. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts})...`;
 
   reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (sessionEnded || !connectedPeerId) return;
     connect(connectedPeerId);
   }, delay);
 }
 
 function handleHostStopped(reason) {
-  hostStoppedReceived = true;
-  const nextState = applyHostStoppedState({
+  endSession(applyHostStoppedState({
     connectedPeerId,
     reconnectAttempts,
     overlayHidden: overlay.classList.contains('hidden')
-  }, reason);
+  }, reason));
+}
 
+// The host handed this session to a newer viewer. Tear down the peer as well
+// as the UI state: the host has already dropped our media call, but closing
+// our side too guarantees the video stops even if that close is lost.
+function handleSuperseded() {
+  endSession(applySupersededState({
+    connectedPeerId,
+    reconnectAttempts,
+    overlayHidden: overlay.classList.contains('hidden')
+  }));
+  cleanup();
+}
+
+function endSession(nextState) {
+  sessionEnded = true;
   connectedPeerId = nextState.connectedPeerId;
   reconnectAttempts = nextState.reconnectAttempts;
   if (nextState.shouldClearReconnectTimer) {
@@ -329,6 +349,10 @@ function handleHostMessage(msg) {
   switch (msg.type) {
     case 'hostStopped':
       handleHostStopped(msg.reason);
+      break;
+
+    case 'superseded':
+      handleSuperseded();
       break;
 
     case 'viewport':

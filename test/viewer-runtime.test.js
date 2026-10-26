@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {
   applyHostStoppedState,
+  applySupersededState,
   createMobilePasteForwardState,
   diffMobileKeyboardText,
   evaluateMobilePasteForward,
@@ -224,6 +225,7 @@ function createViewerHarness({ hash = '#debug=true' } = {}) {
     setInterval: () => 1,
     clearInterval: () => {},
     applyHostStoppedState,
+  applySupersededState,
     createMobilePasteForwardState,
     diffMobileKeyboardText,
     evaluateMobilePasteForward,
@@ -352,5 +354,76 @@ describe('viewer runtime layout handling', () => {
     });
 
     expect(peer.dataConn.sent.filter((msg) => msg.type === 'setViewport')).toHaveLength(1);
+  });
+});
+
+describe('viewer runtime supersede handling', () => {
+  function connectedViewer() {
+    const harness = createViewerHarness({ hash: '#host=host-peer' });
+    const peer = harness.peers[0];
+    peer.emit('open');
+    peer.dataConn.emit('open');
+    // Stand in for a received remote stream.
+    harness.elements['remote-video'].srcObject = { getVideoTracks: () => [] };
+    return { ...harness, peer };
+  }
+
+  it('shows a clear taken-over state and stops its video', () => {
+    const { context, elements, peer } = connectedViewer();
+    expect(elements['remote-video'].srcObject).not.toBeNull();
+
+    context.handleHostMessage({ type: 'superseded' });
+
+    expect(elements['connection-status'].textContent).toBe('Another viewer took over');
+    expect(elements['overlay-msg'].textContent).toContain('Another viewer took over');
+    expect(elements['connect-overlay'].classList.contains('hidden')).toBe(false);
+    expect(elements['remote-video'].srcObject).toBeNull();
+    expect(peer.mediaCall.open).toBe(false);
+    expect(peer.destroyed).toBe(true);
+  });
+
+  it('does not reconnect when the host then closes the channel', () => {
+    const { context, elements, timers, peers, peer } = connectedViewer();
+
+    context.handleHostMessage({ type: 'superseded' });
+    peer.dataConn.emit('close');
+    timers.splice(0).forEach((fn) => fn());
+
+    expect(peers).toHaveLength(1);
+    expect(elements['connection-status'].textContent).toBe('Another viewer took over');
+  });
+
+  it('cannot be revived by a reconnect that was already scheduled', () => {
+    const { context, elements, timers, peers, peer } = connectedViewer();
+
+    // A drop arrives first and schedules a reconnect; then the superseded
+    // notice lands before that timer fires.
+    peer.dataConn.emit('close');
+    expect(elements['connection-status'].textContent).toMatch(/Reconnecting/);
+    context.handleHostMessage({ type: 'superseded' });
+    timers.splice(0).forEach((fn) => fn());
+
+    expect(peers).toHaveLength(1);
+    expect(elements['connection-status'].textContent).toBe('Another viewer took over');
+  });
+
+  it('stops forwarding input once taken over', () => {
+    const { context, peer } = connectedViewer();
+    const conn = peer.dataConn;
+
+    context.handleHostMessage({ type: 'superseded' });
+    const before = conn.sent.length;
+    context.sendControl({ type: 'navigate', url: 'https://example.org/' });
+
+    expect(conn.sent.length).toBe(before);
+  });
+
+  it('can still be reconnected deliberately from the overlay', () => {
+    const { context, elements, peers } = connectedViewer();
+
+    context.handleHostMessage({ type: 'superseded' });
+    elements['overlay-connect'].dispatchEvent('click');
+
+    expect(peers).toHaveLength(2);
   });
 });

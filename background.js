@@ -573,6 +573,61 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // isForbiddenTab comes from lib/background-utils.js (see importScripts above),
 // so the capturable-scheme policy is defined in exactly one place.
 
+// --- Resolved-address check (DNS-to-loopback) ---
+//
+// isForbiddenTab matches hostnames, but a public name can resolve to a private
+// address (127.0.0.1.nip.io), which would let a Viewer URL holder drive the
+// agent's browser against loopback/LAN services. An MV3 extension has no DNS
+// API (chrome.dns is not available to extensions on stable), so viewer-driven
+// destinations are resolved over DNS-over-HTTPS and refused unless every A and
+// AAAA answer is public. Only the hostname is sent, without credentials, and
+// only for navigate/newTab/switchTab requested through the share.
+//
+// This lookup is not authoritative — Chrome resolves again on its own, and a
+// rebinding name can answer differently — so the enforcement point is the
+// connected-address check on Network.responseReceived (see
+// enforceConnectedAddress). Both fail closed.
+const DNS_RESOLVER_URL = 'https://cloudflare-dns.com/dns-query';
+const DNS_LOOKUP_TIMEOUT_MS = 4000;
+
+async function lookupDnsJson(hostname, type) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DNS_LOOKUP_TIMEOUT_MS);
+  try {
+    const url = `${DNS_RESOLVER_URL}?name=${encodeURIComponent(hostname)}&type=${type}`;
+    const response = await fetch(url, {
+      headers: { accept: 'application/dns-json' },
+      credentials: 'omit',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`resolver HTTP ${response.status}`);
+    const addresses = parseDnsJsonAddresses(await response.json());
+    if (!addresses) throw new Error(`lookup failed for ${type}`);
+    return addresses;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Returns { allowed } or { allowed: false, reason, address? }.
+async function checkDestinationAllowed(url) {
+  if (isForbiddenTab({ id: null, url })) {
+    return { allowed: false, reason: 'forbidden_url' };
+  }
+  const hostname = new URL(url).hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  // Literals were classified by value in isForbiddenTab; nothing to resolve.
+  if (isIpLiteralHostname(hostname)) return { allowed: true };
+  let addresses;
+  try {
+    const [v4, v6] = await Promise.all([lookupDnsJson(hostname, 'A'), lookupDnsJson(hostname, 'AAAA')]);
+    addresses = v4.concat(v6);
+  } catch (e) {
+    return { allowed: false, reason: 'resolution_failed', error: e.message || String(e) };
+  }
+  return evaluateResolvedAddresses(addresses);
+}
+
 async function findCapturableTab() {
   // 1. Prefer active tab in current window
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -706,6 +761,7 @@ async function handleStartHostingCDP(tabId) {
   // otherwise stays on the bridge indefinitely and reads as a fault in this
   // one; anything that goes wrong from here on is recorded afresh.
   lastDiagnosticError = null;
+  privateAddressBlockedTabId = null;
   try {
     if (!tabId) {
       const tab = await findCapturableTab();
@@ -1114,9 +1170,36 @@ async function reconcileCapturedTabScreencastGeometry(options = {}) {
 
 let screencastFrameCount = 0;
 
+// Tab whose screencast is cut off because it loaded a document from a
+// private address. Frames are dropped from the moment it is seen, ahead of
+// the asynchronous stop, so the private page is not streamed meanwhile.
+let privateAddressBlockedTabId = null;
+
+function enforceConnectedAddress(tabId, params) {
+  const verdict = evaluateConnectedAddress(params);
+  if (!verdict.private || privateAddressBlockedTabId === tabId) return;
+  privateAddressBlockedTabId = tabId;
+  warn('[BROWSERLINK:bg] Captured tab loaded a document from a private address; stopping host');
+  logDiagnostic('private_address_blocked', {
+    tabId,
+    url: params.response?.url || '',
+    reason: verdict.reason,
+    address: verdict.address || null
+  });
+  stopScreencast().catch(() => {});
+  handleStopHosting('private_address').catch((err) => {
+    error('[BROWSERLINK:bg] Stop after private-address load failed:', err.message || err);
+  });
+}
+
 chrome.debugger.onEvent.addListener((source, method, params) => {
   if (source.tabId !== hostState.capturedTabId) return;
+  if (method === 'Network.responseReceived') {
+    enforceConnectedAddress(source.tabId, params);
+    return;
+  }
   if (method !== 'Page.screencastFrame') return;
+  if (privateAddressBlockedTabId === source.tabId) return;
 
   screencastFrameCount++;
   if (screencastFrameCount <= 3 || screencastFrameCount % 30 === 0) {
@@ -1502,9 +1585,15 @@ async function handleControlEvent(evt) {
           // Previously this preserved chrome:// and handed it to tabs.update,
           // letting a viewer navigate the hosted tab somewhere it is then
           // forbidden to capture or close.
-          if (isForbiddenTab({ id: hostState.capturedTabId, url })) {
-            warn('[BROWSERLINK:bg] navigate blocked: forbidden URL', url);
-            logDiagnostic('navigate_blocked', { tabId: hostState.capturedTabId, url });
+          const navigateVerdict = await checkDestinationAllowed(url);
+          if (!navigateVerdict.allowed) {
+            warn('[BROWSERLINK:bg] navigate blocked:', navigateVerdict.reason, url);
+            logDiagnostic('navigate_blocked', {
+              tabId: hostState.capturedTabId,
+              url,
+              reason: navigateVerdict.reason,
+              address: navigateVerdict.address || null
+            });
             break;
           }
           await chrome.tabs.update(hostState.capturedTabId, { url });
@@ -1666,6 +1755,19 @@ async function switchTabUnlocked(tabId, options = {}) {
       });
       return false;
     }
+    // The tab is already loaded, so its name may resolve privately even
+    // though it passed the hostname policy.
+    const switchVerdict = await checkDestinationAllowed(tab.url);
+    if (!switchVerdict.allowed) {
+      warn('[BROWSERLINK:bg] switchTab blocked:', switchVerdict.reason, tab.url);
+      logDiagnostic('switch_tab_blocked_resolved', {
+        tabId,
+        url: tab.url || '',
+        reason: switchVerdict.reason,
+        address: switchVerdict.address || null
+      });
+      return false;
+    }
   } catch (e) {
     warn('[BROWSERLINK:bg] switchTab: tab not found', tabId);
     logDiagnostic('switch_tab_missing', { tabId, error: e.message || String(e) });
@@ -1731,9 +1833,14 @@ async function createNewTab(url) {
     // Validate BEFORE creating the tab. The delayed switchTab below refuses to
     // capture a forbidden target, but by then the browser has already issued
     // the request — which is the whole point of the private-network boundary.
-    if (isForbiddenTab({ id: null, url: normalized })) {
-      warn('[BROWSERLINK:bg] newTab blocked: forbidden URL', normalized);
-      logDiagnostic('new_tab_blocked', { url: normalized });
+    const newTabVerdict = await checkDestinationAllowed(normalized);
+    if (!newTabVerdict.allowed) {
+      warn('[BROWSERLINK:bg] newTab blocked:', newTabVerdict.reason, normalized);
+      logDiagnostic('new_tab_blocked', {
+        url: normalized,
+        reason: newTabVerdict.reason,
+        address: newTabVerdict.address || null
+      });
       return;
     }
     createProps.url = normalized;
@@ -1790,6 +1897,15 @@ async function attachDebugger(tabId) {
     }
 
     await chrome.debugger.attach({ tabId }, '1.3');
+    // Network events carry the address each document was fetched from, which
+    // is what enforceConnectedAddress checks. Without them that check is
+    // blind, so a failure here fails the attach rather than hosting unchecked.
+    try {
+      await chrome.debugger.sendCommand({ tabId }, 'Network.enable', {});
+    } catch (networkErr) {
+      try { await chrome.debugger.detach({ tabId }); } catch (e) {}
+      throw new Error(`Network.enable failed: ${networkErr.message || networkErr}`);
+    }
     hostState.debuggerAttached = true;
     hostState.debuggerAttachedTabId = tabId;
     debuggerSuspendedUntil = 0;
@@ -1906,15 +2022,31 @@ async function retryAttachDebugger(maxRetries, delayMs) {
         }
       }
     } catch (e) {
-      log('[BROWSERLINK:bg] Original tab gone, moving to a capturable tab');
-      const closedTabId = hostState.capturedTabId;
-      hostState.capturedTabId = null;
+      const lostTabId = hostState.capturedTabId;
+      const tabStillExists = await chrome.tabs.get(lostTabId).then(() => true, () => false);
+      if (!tabStillExists) {
+        // The captured tab is gone: same recovery as onTabRemoved.
+        log('[BROWSERLINK:bg] Original tab gone, moving to a capturable tab');
+        hostState.capturedTabId = null;
+        try {
+          await recoverFromCapturedTabLoss(lostTabId);
+        } catch (e2) {
+          error('[BROWSERLINK:bg] Reattach attempt', i + 1, 'failed:', e2.message);
+        }
+        break;
+      }
+      // Any other failure keeps the inherited behaviour, which is a deferred
+      // product decision (docs/final-report.md, "switchTab debugger-failure").
+      log('[BROWSERLINK:bg] Reattach failed, switching to active tab');
       try {
-        await recoverFromCapturedTabLoss(closedTabId);
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab) {
+          await switchTab(activeTab.id);
+          break;
+        }
       } catch (e2) {
         error('[BROWSERLINK:bg] Reattach attempt', i + 1, 'failed:', e2.message);
       }
-      break;
     }
 
     delayMs = Math.min(delayMs * 1.5, DEBUGGER_REATTACH_MAX_MS);

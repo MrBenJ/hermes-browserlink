@@ -196,7 +196,9 @@ function renderStatus() {
     ? `${capturedTab.id} · ${capturedTab.title || capturedTab.url || 'Untitled tab'}`
     : status.capturedTabId
       ? `${status.capturedTabId} · unavailable`
-      : 'None';
+      : status.hosting
+        ? 'None · no capturable tab (open a web tab, then Switch)'
+        : 'None';
 
   statusEls.tabContext.textContent = capturedTab
     ? [
@@ -270,7 +272,11 @@ function renderAgentSteps() {
   setStep(statusEls.stepHost, status.hosting ? 'Hosting' : 'Waiting', status.hosting ? 'ok' : '');
   setStep(statusEls.stepPeer, status.peerId ? 'Ready' : 'Waiting', status.peerId ? 'ok' : '');
 
-  if (!status.hosting || !status.capturedTabId) {
+  if (status.hosting && !status.capturedTabId) {
+    setStep(statusEls.stepFocus, 'No tab captured', 'warn');
+    return;
+  }
+  if (!status.hosting) {
     setStep(statusEls.stepFocus, 'Waiting', '');
     return;
   }

@@ -323,6 +323,9 @@ function suspendDebuggerRecovery(reason, durationMs = DEBUGGER_SUSPEND_MS) {
 
 function scheduleDebuggerRecovery(delayMs, reason = 'scheduled_recovery') {
   if (!hostState.hosting || !hostState.viewerConnected || hostState.debuggerAttached) return;
+  // No captured tab (it closed and nothing capturable replaced it): there is
+  // nothing to reattach to, and retrying would only exhaust into an error.
+  if (!hostState.capturedTabId) return;
 
   clearDebuggerRecoveryTimer();
   const effectiveDelay = Math.max(delayMs, isDebuggerSuspended() ? debuggerSuspendedUntil - Date.now() : 0);
@@ -1375,22 +1378,44 @@ async function onTabUpdated(tabId, changeInfo, tab) {
   await Promise.allSettled(pendingUpdates);
 }
 
-function onTabRemoved(tabId) {
+async function onTabRemoved(tabId, removeInfo = {}) {
   clearPendingOpenerAutoFollowTab(tabId);
-  if (!hostState.hosting || !hostState.viewerConnected) return;
-  logDiagnostic('tab_removed', {
-    tabId,
-    wasCaptured: tabId === hostState.capturedTabId
-  });
-  if (tabId === hostState.capturedTabId) {
+  if (!hostState.hosting) return;
+  const wasCaptured = tabId === hostState.capturedTabId;
+  // Losing the captured tab matters with or without a viewer: leaving
+  // capturedTabId pointing at a dead tab keeps the share half-alive.
+  if (!wasCaptured && !hostState.viewerConnected) return;
+  logDiagnostic('tab_removed', { tabId, wasCaptured });
+  if (wasCaptured) {
     stopScreencast();
     hostState.capturedTabId = null;
     hostState.debuggerAttached = false;
+    hostState.debuggerAttachedTabId = null;
     resetPageAgentState();
     persistHostState().catch(() => {});
-    sendToViewer({ type: 'status', capturing: false, tabId: null });
+    await recoverFromCapturedTabLoss(tabId, removeInfo.windowId);
   }
-  sendTabListToViewer();
+  await sendTabListToViewer();
+}
+
+// Move the share to another capturable tab, or settle into an explicit
+// no-tab state the viewer and bridge can show and recover from (a later
+// switchTab or newTab captures again). Previously the host followed
+// whichever tab Chrome activated; when that tab was not capturable the
+// switch was refused and the share sat on "Tab closed" with nothing captured.
+async function recoverFromCapturedTabLoss(closedTabId, windowId) {
+  let replacement = null;
+  try {
+    replacement = pickReplacementCapturableTab(await chrome.tabs.query({}), { closedTabId, windowId });
+  } catch (e) {
+    warn('[BROWSERLINK:bg] Could not list tabs after captured tab loss:', e.message || e);
+  }
+  if (replacement && await switchTab(replacement.id)) {
+    return true;
+  }
+  logDiagnostic('captured_tab_none_capturable', { closedTabId });
+  sendToViewer({ type: 'status', capturing: false, tabId: null, reason: 'no_capturable_tab' });
+  return false;
 }
 
 function onTabCreated(tab) {
@@ -1738,15 +1763,9 @@ async function closeTab(tabId) {
     return;
   }
 
-  const wasCaptured = tabId === hostState.capturedTabId;
+  // Closing the captured tab is recovered by onTabRemoved, which fires for
+  // this close like any other and picks a capturable replacement.
   await chrome.tabs.remove(tabId);
-
-  if (wasCaptured) {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab) {
-      await switchTab(activeTab.id);
-    }
-  }
 }
 
 // --- Debugger for input injection ---
@@ -1839,6 +1858,7 @@ async function retryAttachDebugger(maxRetries, delayMs) {
   for (let i = 0; i < maxRetries; i++) {
     if (hostState.debuggerAttached) break;
     if (!hostState.hosting || !hostState.viewerConnected) break;
+    if (!hostState.capturedTabId) break;
 
     const suspendDelay = isDebuggerSuspended() ? debuggerSuspendedUntil - Date.now() : 0;
     const effectiveDelay = Math.max(delayMs, suspendDelay, 0);
@@ -1886,16 +1906,15 @@ async function retryAttachDebugger(maxRetries, delayMs) {
         }
       }
     } catch (e) {
-      log('[BROWSERLINK:bg] Original tab gone, switching to active tab');
+      log('[BROWSERLINK:bg] Original tab gone, moving to a capturable tab');
+      const closedTabId = hostState.capturedTabId;
+      hostState.capturedTabId = null;
       try {
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTab) {
-          await switchTab(activeTab.id);
-          break;
-        }
+        await recoverFromCapturedTabLoss(closedTabId);
       } catch (e2) {
         error('[BROWSERLINK:bg] Reattach attempt', i + 1, 'failed:', e2.message);
       }
+      break;
     }
 
     delayMs = Math.min(delayMs * 1.5, DEBUGGER_REATTACH_MAX_MS);
@@ -2359,6 +2378,7 @@ if (self.__BROWSERLINK_ENABLE_TEST_HOOKS__) {
     handleControlEventForTest: handleControlEvent,
     sendTabChangedForTest: sendTabChanged,
     createNewTabForTest: createNewTab,
+    onTabRemovedForTest: onTabRemoved,
     getDiagnosticsForTest: getDiagnosticsPayload
   };
 }

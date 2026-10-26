@@ -380,8 +380,15 @@ function handleHostMessage(msg) {
       break;
 
     case 'status':
+      // The host has no captured tab (it closed and nothing capturable was
+      // left). Say so until a tab is captured again, then restore the
+      // connected state rather than leaving the no-tab notice behind.
       if (!msg.capturing) {
-        setStatus('Tab closed', 'error');
+        currentTabId = null;
+        urlBar.value = '';
+        setStatus('No tab shared', 'error');
+      } else if (canForwardInput()) {
+        setStatus(hostMetrics?.captureMode ? `Connected (${hostMetrics.captureMode})` : 'Connected', 'connected');
       }
       break;
 

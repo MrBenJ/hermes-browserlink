@@ -416,3 +416,52 @@ describe('Last Error across shares', () => {
     expect(hooks.getDiagnosticsForTest().lastError).toBeNull();
   });
 });
+
+describe('captured tab closed', () => {
+  async function hostingWith(queryTabs) {
+    const loaded = loadBackground({ tabsByIdiUrl: TAB_URLS, queryTabs });
+    const hooks = loaded.context.__browserlinkBackgroundTestHooks;
+    await hooks.ensureHostStateLoadedForTest();
+    hooks.setHostStateForTest({
+      hosting: true, peerId: 'peer-live', viewerConnected: true,
+      capturedTabId: 21, debuggerAttached: true, debuggerAttachedTabId: 21
+    });
+    return { ...loaded, hooks };
+  }
+
+  it('enters a clean no-tab state when nothing capturable remains', async () => {
+    const { hooks, sentToViewer } = await hostingWith([
+      { id: 22, windowId: 7, active: true, url: 'http://127.0.0.1:8787/' }
+    ]);
+
+    await hooks.onTabRemovedForTest(21, { windowId: 7 });
+
+    const state = hooks.getHostStateForTest();
+    expect(state.hosting).toBe(true);
+    expect(state.capturedTabId).toBeNull();
+    expect(state.debuggerAttached).toBe(false);
+    const statuses = sentToViewer.filter((m) => m.type === 'status');
+    expect(statuses.at(-1)).toEqual({ type: 'status', capturing: false, tabId: null, reason: 'no_capturable_tab' });
+  });
+
+  it('moves the share to another capturable tab when one exists', async () => {
+    const { hooks, sentToViewer } = await hostingWith([
+      { id: NORMAL, windowId: 7, active: true, url: TAB_URLS[NORMAL] }
+    ]);
+
+    await hooks.onTabRemovedForTest(21, { windowId: 7 });
+
+    expect(hooks.getHostStateForTest().capturedTabId).toBe(NORMAL);
+    expect(sentToViewer.filter((m) => m.type === 'status').at(-1))
+      .toEqual({ type: 'status', capturing: true, tabId: NORMAL });
+  });
+
+  it('cleans up even when no viewer is connected', async () => {
+    const { hooks } = await hostingWith([]);
+    hooks.setHostStateForTest({ viewerConnected: false });
+
+    await hooks.onTabRemovedForTest(21, { windowId: 7 });
+
+    expect(hooks.getHostStateForTest().capturedTabId).toBeNull();
+  });
+});

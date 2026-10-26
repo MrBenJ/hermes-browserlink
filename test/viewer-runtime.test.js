@@ -427,3 +427,21 @@ describe('viewer runtime supersede handling', () => {
     expect(peers).toHaveLength(2);
   });
 });
+
+describe('viewer runtime no-tab state', () => {
+  it('shows a no-tab state and clears it once a tab is captured again', () => {
+    const { context, elements, peers } = createViewerHarness({ hash: '#host=host-peer' });
+    peers[0].emit('open');
+    peers[0].dataConn.emit('open');
+    context.handleHostMessage({ type: 'hostMode', mode: 'screencast' });
+    context.handleHostMessage({ type: 'tabChanged', tabId: 4, url: 'https://example.com/', title: 'Example' });
+
+    context.handleHostMessage({ type: 'status', capturing: false, tabId: null, reason: 'no_capturable_tab' });
+    expect(elements['connection-status'].textContent).toBe('No tab shared');
+    expect(elements['url-bar'].value).toBe('');
+
+    context.handleHostMessage({ type: 'status', capturing: true, tabId: 9 });
+    expect(elements['connection-status'].textContent).toBe('Connected (screencast)');
+    expect(elements['connection-status'].className).toBe('connected');
+  });
+});

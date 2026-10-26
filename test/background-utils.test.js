@@ -8,7 +8,8 @@ import {
   VIEWPORT_MAX_DIMENSION,
   createSwitchSerializer,
   getOpenerAutoFollowDecision,
-  getViewerTabListQueryInfo
+  getViewerTabListQueryInfo,
+  pickReplacementCapturableTab,
 } from '../lib/background-utils.js';
 
 const MAX_W = 3840;
@@ -319,5 +320,33 @@ describe('isForbiddenTab trailing-dot hostnames', () => {
 
   it('does not overblock a public FQDN with a trailing dot', () => {
     expect(forbid('https://example.com.')).toBe(false);
+  });
+});
+
+describe('pickReplacementCapturableTab', () => {
+  const pub = (id, extra = {}) => ({ id, windowId: 1, active: false, url: `https://example.com/${id}`, ...extra });
+
+  it('returns null when no capturable tab remains', () => {
+    // The Phase A B4 case: Chrome activated a loopback tab after the captured
+    // tab closed. That tab must never be picked up as the replacement.
+    expect(pickReplacementCapturableTab([
+      { id: 2, windowId: 1, active: true, url: 'http://127.0.0.1:8787/' },
+      { id: 3, windowId: 1, active: false, url: 'chrome://version' }
+    ], { closedTabId: 1 })).toBeNull();
+    expect(pickReplacementCapturableTab([], { closedTabId: 1 })).toBeNull();
+  });
+
+  it('never picks the tab that just closed', () => {
+    expect(pickReplacementCapturableTab([pub(1, { active: true })], { closedTabId: 1 })).toBeNull();
+  });
+
+  it('prefers the active tab in the closed tab\'s window', () => {
+    const tabs = [pub(5, { windowId: 2, active: true }), pub(6), pub(7, { active: true })];
+    expect(pickReplacementCapturableTab(tabs, { closedTabId: 1, windowId: 1 }).id).toBe(7);
+  });
+
+  it('falls back to any active capturable tab, then any capturable tab', () => {
+    expect(pickReplacementCapturableTab([pub(6), pub(5, { windowId: 2, active: true })], { closedTabId: 1, windowId: 1 }).id).toBe(5);
+    expect(pickReplacementCapturableTab([pub(6), pub(8)], { closedTabId: 1, windowId: 1 }).id).toBe(6);
   });
 });

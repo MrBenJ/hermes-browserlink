@@ -137,20 +137,51 @@ BrowserLink block) and restarting again.
 
 ### 4.3 Merge rules — never blind-replace
 
-- If `AGENT_BROWSER_ARGS` is **absent**, add the line above as-is.
-- If it **already exists**, preserve every existing flag and append
-  BrowserLink's two flags to the comma-separated list.
-- If a `--load-extension=` or `--disable-extensions-except=` flag already
-  exists, do **not** add a second copy of that flag. Chromium takes the
-  last occurrence. Merge BrowserLink's path into the existing flag's own
-  comma-separated **path list**:
-  `--load-extension=/existing/one,/ABSOLUTE/PATH/TO/HERMES_HOME/browser-extensions/browserlink`
-- Setting `AGENT_BROWSER_ARGS` **disables** Hermes' auto-injection of
-  `--no-sandbox,--disable-dev-shm-usage`
-  (`tools/browser_tool.py:2447-2461`). That injection is gated on
-  root/Docker/AppArmor and does not fire on a normal macOS user account, so
-  on macOS this costs nothing. **On Linux/Docker, re-add those two flags
-  manually** or the browser will fail to start.
+Hermes hands `AGENT_BROWSER_ARGS` straight to agent-browser, which splits
+it on **every comma and newline** (agent-browser README, `--args`). A
+value like `--load-extension=/a,/b` therefore turns into two arguments,
+`--load-extension=/a` and a stray `/b`. Chromium's own comma-separated
+path list **cannot be expressed inside `AGENT_BROWSER_ARGS`.**
+
+- **`AGENT_BROWSER_ARGS` absent** (the tested, primary path): add the
+  block from §4.2 as-is.
+- **`AGENT_BROWSER_ARGS` exists, but it has no `--load-extension=` or
+  `--disable-extensions-except=`:** preserve every existing flag and
+  append BrowserLink's flags to the comma-separated list.
+- **The human already loads other extensions** (an existing
+  `--load-extension=` or `--disable-extensions-except=` in
+  `AGENT_BROWSER_ARGS`, or extensions in an `agent-browser.json` config):
+  do **not** merge BrowserLink's path into those flags, and do **not** add
+  a second copy of either flag. Chromium takes the last occurrence, and
+  `--disable-extensions-except=<browserlink>` would switch off the
+  human's other extensions. Instead, leave their extension flags alone
+  and load BrowserLink through agent-browser's own extension option:
+
+  ```
+  AGENT_BROWSER_EXTENSIONS=/ABSOLUTE/PATH/TO/HERMES_HOME/browser-extensions/browserlink
+  ```
+
+  agent-browser documents `--extension <path>` as repeatable, with
+  `AGENT_BROWSER_EXTENSIONS` as its env form. Its bundled command
+  reference (`skill-data/core/references/commands.md`, v0.36) gives the
+  separator as **comma-separated paths**, e.g. `/ext1,/ext2`. Extensions
+  from user and project `agent-browser.json` configs are concatenated.
+  **Unverified:** this route has not been tested with BrowserLink under
+  Hermes. That covers whether Hermes forwards this variable and how
+  agent-browser combines it with a `--load-extension=` you already have
+  in `--args`. Treat it as a fallback, and prove it with §5.2: every
+  expected extension, BrowserLink included, must appear in CDP. If one
+  of them is missing, stop and report it rather than editing more
+  flags.
+- **Sandbox flags.** On root, Docker and AppArmor hosts, Hermes normally
+  adds `--no-sandbox,--disable-dev-shm-usage` itself
+  (`_apply_chromium_sandbox_args`). Setting `AGENT_BROWSER_ARGS` turns
+  that off. On those hosts, include both flags in `AGENT_BROWSER_ARGS`
+  yourself, or the browser will fail to start. A normal macOS user
+  account never gets the injection, so on macOS this costs nothing.
+- **Engine.** BrowserLink needs the default Chrome engine. Under the
+  Lightpanda engine (`AGENT_BROWSER_ENGINE=lightpanda`), these variables
+  are stripped, so the extension does not load.
 
 ### 4.4 Human approval is required
 

@@ -90,16 +90,27 @@ capturable; browser-internal, extension, `file://` and other non-web schemes
 are excluded, as are literal loopback, RFC1918/LAN, link-local and other
 private hosts.
 
-> **Limit of that check.** It matches on the hostname, not the resolved
-> address, so it stops the direct cases (`127.0.0.1`, `192.168.x`,
-> `169.254.169.254`, `router.local`) but **not** a public-looking domain
-> that resolves to a private address — `127.0.0.1.nip.io` and friends get
-> through. Nor does it stop a public URL from *redirecting* to a private one:
-> that is caught after the fact, when the tab lands, and hosting stops — but
-> the request has already been issued by then. Treat it as defence in depth, not a guarantee. An extension
-> cannot resolve DNS before navigating; a real boundary needs an explicit
-> operator allowlist of reachable origins or a network-layer block. See
-> `docs/final-report.md`.
+> **How that check works, and its limits.** Hostnames are classified first
+> (`127.0.0.1`, `192.168.x`, `169.254.169.254`, `router.local`, and encoded
+> or IPv6-mapped forms of them). For the destinations a link holder can
+> request — `navigate`, `newTab`, `switchTab` — the host also resolves the
+> name and refuses it unless **every** A/AAAA answer is public, so
+> `127.0.0.1.nip.io` and friends are refused before any request is sent.
+> MV3 extensions have no DNS API, so that lookup goes over DNS-over-HTTPS to
+> Cloudflare (`cloudflare-dns.com`): it sees those hostnames, and only those,
+> without cookies. If the lookup fails, the request is refused.
+>
+> That lookup is not the final word — Chrome resolves the name again itself,
+> and a rebinding name can answer differently the second time. So the host
+> also checks the address each loaded document **actually came from**
+> (CDP `Network.responseReceived` → `remoteIPAddress`). A private address
+> drops the screencast immediately and stops hosting. A redirect or link
+> click to a private destination is caught the same way. In those cases the
+> request itself has already reached the private address by the time it is
+> caught; what is prevented is the page being shown or driven. Cross-site
+> iframes run in separate processes this check does not see. If the browser
+> uses a proxy, the address is the proxy's, and a local proxy blocks
+> everything. Treat it as a strong guard, not a network firewall.
 
 So the Viewer URL is a bearer capability over the agent browser's normal
 tabs, not a keyhole onto one of them. The host ID is a random 122-bit UUID,

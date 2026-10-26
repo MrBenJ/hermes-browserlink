@@ -129,27 +129,34 @@ that belong to you, not something to slip into a port under review pressure.
 the permission and durable wake-up and invert that test. It is maybe an
 hour's work either way.
 
-## ⚠️ Needs your decision: private-network filtering is hostname-based
+## ✅ Resolved in fix round 1: private-network filtering now checks addresses
 
-A Viewer URL can drive `navigate`, `newTab` and `switchTab`, so the tab
-policy now refuses loopback, RFC1918, CGNAT, link-local and internal-looking
-hostnames — a link holder cannot point the agent's browser straight at
-`127.0.0.1:8787`, a router panel or `169.254.169.254`.
+Ben approved closing the DNS-to-loopback gap (`127.0.0.1.nip.io`) after
+Phase A confirmed it live.
 
-**What it cannot do:** resolve DNS. A public-looking name that resolves to a
-private address (`127.0.0.1.nip.io`, wildcard-DNS services generally) passes
-the check. Aria confirmed this concretely.
+- **Before** `navigate`, `newTab` and `switchTab`, the host resolves the
+  hostname over DNS-over-HTTPS and refuses it unless every A/AAAA answer is a
+  public address. MV3 extensions have no DNS API (`chrome.dns` is not
+  available to extensions on stable), so DoH is the only resolver the
+  extension can use. Failure refuses.
+- **After** a document loads, the address Chrome actually connected to (CDP
+  `Network.responseReceived` `remoteIPAddress`) is checked. A private address
+  drops frames immediately and stops hosting. This is the enforcement point
+  for DNS rebinding between the lookup and the load, and for redirects.
+- The address classifier covers loopback, RFC1918, CGNAT, link-local,
+  `0.0.0.0/8`, the special-purpose and multicast ranges, ULA, link- and
+  site-local IPv6, IPv4-mapped/compatible, NAT64 and 6to4 forms, and
+  decimal/octal/hex IPv4 encodings. Anything unparseable counts as private.
 
-An MV3 extension has no pre-navigation DNS resolution, so closing it properly
-means either an explicit operator allowlist of reachable origins, or a
-network-layer block via `declarativeNetRequest` — both new design surface.
+**Trade-off for you to know about:** the DoH lookup sends the hostnames a
+link holder asks for (no paths, no cookies) to Cloudflare. If you would
+rather not have that third party, the lookup can be removed and the
+post-load address check alone kept. The cost is that a request to a
+private-resolving name then reaches its target before the share is cut.
 
-**What I did:** kept the hostname filter (it closes the direct cases cheaply)
-and corrected the README so it is described as defence in depth rather than a
-guarantee.
-
-**Your options:** accept it as defence in depth, or ask for an origin
-allowlist / DNR-based block as a follow-up.
+**Still not covered:** cross-site iframes (separate processes the tab-level
+debugger does not see), and a proxy in front of the browser, which makes
+the connected address the proxy's.
 
 ## Deferred for you: switchTab debugger-failure handling
 

@@ -180,11 +180,50 @@ Then:
 curl -s http://127.0.0.1:<PORT>/json/list
 ```
 
-Look for a target whose `url` starts with `chrome-extension://`. The 32-char
-path component is the **extension ID**.
+**Do not just take the first `chrome-extension://` target.** Chrome ships
+its own component extensions, which also appear as `chrome-extension://`
+service-worker targets (Chrome for Testing 151 shows Gemini in Chrome,
+`admccjkmockfdflocgggjfgdacdodkdf`, and `nkeimhogjdpnpccoofpliimaahmaaome`).
+Identify BrowserLink by its **known ID**, then confirm it by **manifest
+name**.
 
-**If no `chrome-extension://` target exists, the install has failed.** Do
-not proceed and do not patch the skill. Re-check §4.1 (headed mode) first.
+1. **Predict the ID.** An unpacked extension's ID is the first 32 hex
+   characters of the SHA-256 of its absolute load path, with `0-f` mapped to
+   `a-p`. Use the exact path from `--load-extension`:
+
+   ```bash
+   EXT_PATH="$HOME/.hermes/browser-extensions/browserlink"   # as passed to --load-extension
+   EXPECTED_ID=$(printf '%s' "$EXT_PATH" | shasum -a 256 | cut -c1-32 | tr '0-9a-f' 'a-p')
+   echo "$EXPECTED_ID"
+   ```
+
+2. **Find that ID in CDP.** Exactly one service worker must match:
+
+   ```bash
+   curl -s http://127.0.0.1:<PORT>/json/list \
+     | grep -o "\"url\": *\"chrome-extension://$EXPECTED_ID/[^\"]*\""
+   ```
+
+   Expected: `"url": "chrome-extension://<EXPECTED_ID>/background.js"`.
+
+3. **Confirm the manifest name.** Open the bridge as a new target and check
+   its title:
+
+   ```bash
+   curl -s -X PUT "http://127.0.0.1:<PORT>/json/new?chrome-extension://$EXPECTED_ID/bridge.html" \
+     | grep '"title"'
+   ```
+
+   Expected: `"title": "BrowserLink Bridge"` (the page title can take a
+   moment; re-read `/json/list` if it still shows the URL). The manifest name
+   is `BrowserLink`. A different title, or a `chrome-error://` URL, means
+   that ID is not BrowserLink.
+
+**If no target matches the predicted ID, the install has failed.** Do not
+fall back to another `chrome-extension://` ID, and do not patch the skill.
+Check that `EXT_PATH` is byte-for-byte the path in `--load-extension` (no
+trailing slash, no `~`, no symlinked alternative), then re-check §4.1
+(headed mode).
 
 Unpacked extension IDs are derived from the install path, so the ID changes
 if the path changes. Never hardcode an ID from a different machine or a
@@ -224,9 +263,15 @@ Find the address with `tailscale ip -4`, the MagicDNS name, or
 `ipconfig getifaddr en0`.
 
 The value is saved to `chrome.storage.local` and persists across bridge
-reopens. The shareable Viewer URL is built from it; until it is set, the
-bridge shows *"Set Viewer Base URL to get a shareable link"* rather than
-emitting a dead link.
+reopens and browser restarts. The shareable Viewer URL is built from it;
+until it is set, the bridge shows *"Set Viewer Base URL to get a shareable
+link"* rather than emitting a dead link.
+
+> **Set it again after any install-path change.** `chrome.storage.local` is
+> per extension ID, and an unpacked extension's ID is derived from its load
+> path (§5.2). Moving or renaming the durable path, or loading a second copy,
+> gives a new ID with an **empty** Viewer Base URL — and a new bridge URL, so
+> re-run §5.2–§5.3 and §8 too.
 
 > **Loopback rule.** `127.0.0.1` and `localhost` base URLs are for
 > **same-machine smoke tests only**. A loopback link handed to a human on

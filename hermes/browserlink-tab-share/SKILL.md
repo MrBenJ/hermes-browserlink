@@ -57,14 +57,18 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
   switcher, and the host answers tab-list and tab-switch requests, so anyone
   holding the link can enumerate and switch to any other **web** tab in this
   browser profile (`http:`/`https:` public hosts only; browser-internal,
-  extension, `file://`, and loopback/LAN/link-local tabs are excluded).
+  extension, `file://`, and loopback/LAN/link-local tabs are excluded,
+  including public names that resolve to such addresses).
   When you
   hand over a link, say so plainly — do not describe it as access to one
   tab. If the profile holds sensitive unrelated sessions, warn the human
   before sharing.
 - **Only one viewer at a time.** If a second person opens the same Viewer
-  URL they take over the session and the first is disconnected. Do not
-  hand the same link to two people and expect both to watch.
+  URL they take over the session: the first viewer loses video and control
+  and shows *"Another viewer took over"*, and it does not reconnect on its
+  own. Do not hand the same link to two people and expect both to watch.
+  Opening a new viewer does **not** revoke the link — the first person can
+  reopen it and take the session back. Only **Stop Host** ends access.
 - **Share expiry is best-effort.** The countdown runs on an MV3
   service-worker timer that Chrome may suspend, so an idle viewer can keep
   receiving frames past the deadline. Do not tell the human the share
@@ -86,6 +90,9 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
 3. **Stop any old host**, then select the requested tab and **Start Host**.
 4. **Read `Current Peer ID` and `Viewer URL`** from the bridge fields.
    Reopen `BRIDGE_URL` if Start Host backgrounded it — state persists.
+   The `#host=` value at the end of the Viewer URL must equal the Current
+   Peer ID. Every Start Host mints a new peer ID, so a link from an earlier
+   share is dead.
 5. **Ensure the viewer is being served:**
    ```bash
    curl -sf http://127.0.0.1:8787/browserlink-viewer.html >/dev/null
@@ -102,6 +109,7 @@ If BrowserLink is not installed yet, follow `INSTALL.md` in the
 7. **Verify** before replying:
    - bridge says `Hosting`
    - peer ID is populated
+   - Viewer URL's `#host=` equals the Current Peer ID
    - captured tab matches what was asked for
    - capture mode is present
    - focus indicator reads `Active`
@@ -137,7 +145,8 @@ Before replying, confirm every relevant item:
 - [ ] viewer is being served
 - [ ] Viewer Base URL is configured and is **not** loopback when the human
       is on another device
-- [ ] link returned was read from the bridge's `Viewer URL` field
+- [ ] link returned was read from the bridge's `Viewer URL` field, and its
+      `#host=` matches the Current Peer ID
 
 ## Notes
 
